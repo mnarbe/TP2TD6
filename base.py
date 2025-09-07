@@ -4,11 +4,12 @@ import numpy as np
 from scipy import sparse
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+import xgboost as xgb
 
 pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
-COMPETITION_PATH = "D:/Usuario/Descargas/tp para clonar/TP2TD6/"
+COMPETITION_PATH = ""
 
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
@@ -89,7 +90,7 @@ def split_train_test(X, y, test_mask):
     return X_train, X_test, y_train, y_test
 
 
-def train_classifier(X_train, y_train, params=None):
+def train_classifier_basic(X_train, y_train, params=None):
     """
     Train a Classifier 
     """
@@ -112,6 +113,33 @@ def train_classifier(X_train, y_train, params=None):
     model = RandomForestClassifier(**rf_params)
 
     print("  → Fitting RandomForestClassifier...")
+    model.fit(X_train, y_train)
+    print("  → Model training complete.")
+    return model
+
+def train_classifier_xgboost(X_train, y_train, params=None):
+    """
+    Train a Classifier 
+    """
+    print("Training model...")
+
+    # Entrenamiento y evaluación del modelo XGBoost
+    xgb_params = {'colsample_bytree': 0.75,
+                'gamma': 0.5,
+                'learning_rate': 0.075,
+                'max_depth': 8,
+                'min_child_weight': 1,
+                'n_estimators': 500,
+                'reg_lambda': 0.5,
+                'subsample': 0.75,
+                }
+
+    model = xgb.XGBClassifier(objective = 'binary:logistic',
+                                seed = 1234,
+                                eval_metric = 'auc',
+                                **xgb_params)
+
+    print("  → Fitting XGBoostClassifier...")
     model.fit(X_train, y_train)
     print("  → Model training complete.")
     return model
@@ -151,7 +179,7 @@ def main():
     ] #MODIFICAR
     df = df[to_keep]
 
-   # Build feature matrix and get feature names
+    # Build feature matrix and get feature names
     y = df["target"].to_numpy()
     X = df.drop(columns=["target"])
     feature_names = X.columns
@@ -161,7 +189,7 @@ def main():
     X_train, X_test, y_train, _ = split_train_test(X, y, test_mask)
 
     # Train model
-    model = train_classifier(X_train, y_train)
+    model = train_classifier_basic(X_train, y_train)
 
     # Display top 20 feature importances
     print("Extracting and sorting feature importances...")
