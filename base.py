@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
-COMPETITION_PATH = "."
+COMPETITION_PATH = "D:/Usuario/Descargas/tp para clonar/TP2TD6/"
 
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
@@ -76,11 +76,13 @@ def split_train_test(X, y, test_mask):
     Split features and labels into train/test based on mask.
     """
     print("Splitting data into train/test sets...")
-    
-    X_train = X
-    X_test = X
-    y_train = y
-    y_test = y
+
+    train_mask = ~test_mask  # Invertir la máscara
+
+    X_train = X[train_mask]
+    X_test = X[test_mask]
+    y_train = y[train_mask]
+    y_test = y[test_mask]
 
     print(f"  → Training set: {X_train.shape[0]} rows")
     print(f"  → Test set:     {X_test.shape[0]} rows")
