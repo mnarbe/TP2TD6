@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 
 pd.set_option("display.max_columns", None)
 
-COMPETITION_PATH = "C:\Users\OEM\Documents\Facultad 2025\TD6\TP2\TP2TD6"
+COMPETITION_PATH = ""
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     """

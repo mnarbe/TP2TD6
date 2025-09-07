@@ -1,16 +1,19 @@
 import os
 import pandas as pd
 import numpy as np
+import math
 from scipy import sparse
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
+from sklearn.metrics import roc_auc_score
 import xgboost as xgb
+from hyperopt import hp, fmin, tpe, space_eval, STATUS_OK
 
 pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
 COMPETITION_PATH = ""
-
+RAND_SEED = 251328
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     """
@@ -103,7 +106,7 @@ def train_classifier_basic(X_train, y_train, params=None):
         "min_samples_leaf": 1,
         "max_features": "sqrt",
         "n_jobs": -1,
-        "random_state": 42,
+        "random_state": RAND_SEED,
         "bootstrap": True,
     }
     rf_params = default_params.copy()
@@ -123,28 +126,20 @@ def train_classifier_xgboost(X_train, y_train, params=None):
     """
     print("Training model...")
 
-    # Entrenamiento y evaluación del modelo XGBoost
-    xgb_params = {'colsample_bytree': 0.75,
-                'gamma': 0.5,
-                'learning_rate': 0.075,
-                'max_depth': 8,
-                'min_child_weight': 1,
-                'n_estimators': 500,
-                'reg_lambda': 0.5,
-                'subsample': 0.75,
-                }
-
     model = xgb.XGBClassifier(objective = 'binary:logistic',
-                                seed = 1234,
+                                seed = RAND_SEED,
                                 eval_metric = 'auc',
-                                **xgb_params)
+                                **params)
 
     print("  → Fitting XGBoostClassifier...")
     model.fit(X_train, y_train)
     print("  → Model training complete.")
     return model
 
-
+def objective(params, X_train, y_train, X_valid, y_valid):
+    tree = train_classifier_xgboost(X_train, y_train, params)
+    score = cross_val_score(tree, X_valid, y_valid, cv=KFold(5), scoring="roc_auc").mean()
+    return {'loss': 1 - score, 'status': STATUS_OK}
 
 
 
@@ -153,7 +148,7 @@ def main():
 
     # Load and preprocess data
     df = load_competition_datasets(
-        COMPETITION_PATH, sample_frac=0.2, random_state=1234
+        COMPETITION_PATH, sample_frac=0.2, random_state=RAND_SEED
     )
     df = cast_column_types(df)
 
@@ -164,7 +159,6 @@ def main():
 
     
     # Create target and test mask
-
     print("Creating 'target' and 'is_test' columns...")
     df["target"] = (df["reason_end"] == "fwdbtn").astype(int)
     df["is_test"] = df["reason_end"].isna()
@@ -174,9 +168,12 @@ def main():
     to_keep = [
         "obs_id",
         "target",
+        "user_order",
         "is_test",
-        "user_order"
-    ] #MODIFICAR
+        "incognito_mode",
+        "offline",
+        "shuffle",
+    ]
     df = df[to_keep]
 
     # Build feature matrix and get feature names
@@ -186,21 +183,58 @@ def main():
     test_mask = df["is_test"].to_numpy()
 
     # Split data
-    X_train, X_test, y_train, _ = split_train_test(X, y, test_mask)
+    X_train_inicial, X_test, y_train_inicial, _ = split_train_test(X, y, test_mask)
+
+    # Split train y validation
+    size_val = math.ceil(0.2 * X_train_inicial.shape[0])
+    X_train, X_val, y_train, y_val = train_test_split(X_train_inicial, y_train_inicial, test_size=size_val, random_state=RAND_SEED)
+
+    # Optimización de hiperparametros
+    space = {
+        # 'criterion': hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
+        # 'splitter': hp.choice('splitter', ['best', 'random']),
+        # 'min_samples_split': hp.uniformint('min_samples_split', 2, 20),
+        # 'min_samples_leaf': hp.uniformint('min_samples_leaf', 1, 20),
+        # 'min_impurity_decrease': hp.uniform('min_impurity_decrease', 0, 0.1),
+        'max_depth': hp.uniformint('max_depth', 3, 50),
+        'gamma': hp.uniform('gamma', 0, 5),                    # Regularización, suele estar entre 0 y 5
+        'learning_rate': hp.uniform('learning_rate', 0.01, 0.3), # Típico entre 0.01 y 0.3
+        'reg_lambda': hp.uniform('reg_lambda', 0, 2),           # Regularización L2, 0 a 2
+        'subsample': hp.uniform('subsample', 0.5, 1),           # Fracción de muestras, 0.5 a 1
+        'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1), # Fracción de columnas, 0.5 a 1
+        'n_estimators': hp.uniformint('n_estimators', 50, 500), # Número de árboles, 50 a 500
+        'min_child_weight': hp.uniformint('min_child_weight', 1, 10) # Peso mínimo de hijos, 1 a 10
+    }
+    best = fmin(
+        lambda params: objective(params, X_train, y_train, X_val, y_val),
+        space,
+        algo=tpe.suggest,
+        max_evals=10,
+        rstate=np.random.default_rng(RAND_SEED)
+    )
+    params = space_eval(space, best) # Guardamos los hiperparámetros ganadores.
+    print("\nBest hyperparameters found:")
+    print(params)
 
     # Train model
-    model = train_classifier_basic(X_train, y_train)
+    model = train_classifier_xgboost(X_train, y_train, params)
 
     # Display top 20 feature importances
-    print("Extracting and sorting feature importances...")
+    print("\nExtracting and sorting feature importances...")
     importances = model.feature_importances_
     imp_series = pd.Series(importances, index=feature_names)
     imp_sorted = imp_series.sort_values(ascending=False)
     print("\nTop 20 feature importances:")
     print(imp_sorted.head(20))
 
+    # Predict on validation
+    print("\nGenerating predictions for validation set...")
+    preds_val = model.predict_proba(X_val)[:, 1]
+    val_score = roc_auc_score(y_val, preds_val)
+    print(f"  → Validation ROC AUC: {val_score}")
+
     # Predict on test set
-    print("Generating predictions for test set...")
+    print("\nGenerating predictions for test set...")
     test_obs_ids = X_test["obs_id"]
     preds_proba = model.predict_proba(X_test)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
