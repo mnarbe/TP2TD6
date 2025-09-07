@@ -4,7 +4,7 @@ import numpy as np
 import math
 from scipy import sparse
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score, KFold, GroupKFold, GroupShuffleSplit
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.metrics import roc_auc_score
 import xgboost as xgb
 from hyperopt import hp, fmin, tpe, space_eval, STATUS_OK
@@ -14,10 +14,6 @@ pd.set_option("display.max_columns", None)
 # Adjust this path if needed
 COMPETITION_PATH = ""
 RAND_SEED = 251328
-PORCENTAJE_DATASET_UTILIZADO = 0.5 # Porcentaje del dataset a utilizar (0.0-1.0)
-MAX_EVALS_BAYESIAN = 3 # Cantidad de iteraciones para la optimización bayesiana
-UTILIZA_AGRUPAMIENTO_POR_USUARIO = False # Si es True, usa GroupKFold y separa usuarios entre train/val
-FOLD_SPLITS = 3 # Cantidad de folds (KFold o GroupKFold)
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     """
@@ -128,49 +124,22 @@ def train_classifier_xgboost(X_train, y_train, params=None):
     """
     Train a Classifier 
     """
+    print("Training model...")
 
     model = xgb.XGBClassifier(objective = 'binary:logistic',
                                 seed = RAND_SEED,
                                 eval_metric = 'auc',
-                                enable_categorical=True,
                                 **params)
 
+    print("  → Fitting XGBoostClassifier...")
     model.fit(X_train, y_train)
+    print("  → Model training complete.")
     return model
 
-# def objective(params, X_train, y_train, X_valid, y_valid):
-#     tree = train_classifier_xgboost(X_train, y_train, params)
-#     score = cross_val_score(tree, X_valid, y_valid, cv=KFold(5), scoring="roc_auc").mean()
-#     return {'loss': 1 - score, 'status': STATUS_OK}
-
-def objective_KFold(params, X_train, y_train):
-    """
-    CV interna sobre el train inicial (sin agrupar por usuario).
-    """
-    kf = KFold(n_splits=FOLD_SPLITS, shuffle=True, random_state=RAND_SEED)
-    aucs = []
-    for tr_idx, va_idx in kf.split(X_train, y_train):
-        X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
-        y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        model = train_classifier_xgboost(X_tr, y_tr, params)
-        preds = model.predict_proba(X_va)[:, 1]
-        aucs.append(roc_auc_score(y_va, preds))
-    return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
-
-def objective_GroupKFold(params, X_train, y_train, groups):
-    """
-    CV interna sobre el train inicial (sin tocar validación).
-    """
-    gkf = GroupKFold(n_splits=FOLD_SPLITS)
-    aucs = []
-    for tr_idx, va_idx in gkf.split(X_train, y_train, groups):
-        X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
-        y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        model = train_classifier_xgboost(X_tr, y_tr, params)
-        preds = model.predict_proba(X_va)[:, 1]
-        aucs.append(roc_auc_score(y_va, preds))
-    return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
-
+def objective(params, X_train, y_train, X_valid, y_valid):
+    tree = train_classifier_xgboost(X_train, y_train, params)
+    score = cross_val_score(tree, X_valid, y_valid, cv=KFold(5), scoring="roc_auc").mean()
+    return {'loss': 1 - score, 'status': STATUS_OK}
 
 
 
@@ -179,13 +148,13 @@ def main():
 
     # Load and preprocess data
     df = load_competition_datasets(
-        COMPETITION_PATH, sample_frac=PORCENTAJE_DATASET_UTILIZADO, random_state=RAND_SEED
+        COMPETITION_PATH, sample_frac=0.2, random_state=RAND_SEED
     )
     df = cast_column_types(df)
 
     # Generate user order column
     df = df.sort_values(["username", "ts"])
-    # df["user_order"] = df.groupby("username", observed=True).cumcount() + 1
+    df["user_order"] = df.groupby("username", observed=True).cumcount() + 1
     df = df.sort_values(["obs_id"])
 
     
@@ -196,23 +165,31 @@ def main():
     df.drop(columns=["reason_end"], inplace=True)
     print("  → 'target' and 'is_test' created, dropped 'reason_end' column.")
 
-    # Keep only relevant columns
     to_keep = [
         "obs_id",
         "target",
+        "user_order",
         "is_test",
         "incognito_mode",
         "offline",
         "shuffle",
-        "username",
-        "platform",
-        "conn_country",
-        "ip_addr",
-        "master_metadata_album_artist_name"
     ]
     df = df[to_keep]
 
-    # Define hyperparameter search space
+    # Build feature matrix and get feature names
+    y = df["target"].to_numpy()
+    X = df.drop(columns=["target"])
+    feature_names = X.columns
+    test_mask = df["is_test"].to_numpy()
+
+    # Split data
+    X_train_inicial, X_test, y_train_inicial, _ = split_train_test(X, y, test_mask)
+
+    # Split train y validation
+    size_val = math.ceil(0.2 * X_train_inicial.shape[0])
+    X_train, X_val, y_train, y_val = train_test_split(X_train_inicial, y_train_inicial, test_size=size_val, random_state=RAND_SEED)
+
+    # Optimización de hiperparametros
     space = {
         # 'criterion': hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
         # 'splitter': hp.choice('splitter', ['best', 'random']),
@@ -228,63 +205,13 @@ def main():
         'n_estimators': hp.uniformint('n_estimators', 50, 500), # Número de árboles, 50 a 500
         'min_child_weight': hp.uniformint('min_child_weight', 1, 10) # Peso mínimo de hijos, 1 a 10
     }
-
-    # Build feature matrix and get feature names
-    test_mask = df["is_test"].to_numpy()
-    y = df["target"].to_numpy()
-    X = df.drop(columns=["target", "is_test"])
-
-    # Split data
-    X_train_inicial, X_test, y_train_inicial, _ = split_train_test(X, y, test_mask)
-
-    # Guardar obs_id
-    test_obs_ids = X_test["obs_id"].copy()
-    
-    X_train = None
-    y_train = None
-    X_val = None
-    y_val = None
-    best = None
-    if(UTILIZA_AGRUPAMIENTO_POR_USUARIO == True):
-        # Guardamos groups por usuario
-        groups = X_train_inicial["username"]
-
-        # Split train vs validation asegurando separación de usuarios
-        gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=RAND_SEED)
-        tr_idx, va_idx = next(gss.split(X_train_inicial, y_train_inicial, groups))
-        X_train, X_val = X_train_inicial.iloc[tr_idx], X_train_inicial.iloc[va_idx]
-        y_train, y_val = y_train_inicial[tr_idx], y_train_inicial[va_idx]
-        groups_train = groups.iloc[tr_idx]
-
-        # Sacamos username y obs_id de features
-        X_train = X_train.drop(columns=["username", "obs_id"])
-        X_val = X_val.drop(columns=["username", "obs_id"])
-        X_test = X_test.drop(columns=["username", "obs_id"])
-
-        # Optimización de hiperparametros
-        best = fmin(
-            fn=lambda params: objective_GroupKFold(params, X_train, pd.Series(y_train), groups_train),
-            space=space,
-            algo=tpe.suggest,
-            max_evals=MAX_EVALS_BAYESIAN,
-            rstate=np.random.default_rng(RAND_SEED),
-        )
-    else:
-        X = X.drop(columns=["obs_id"])
-        # Split train vs validation normal
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train_inicial, y_train_inicial, test_size=0.2, random_state=RAND_SEED, stratify=y_train_inicial
-        )
-
-        # Optimización de hiperparametros
-        best = fmin(
-            fn=lambda params: objective_KFold(params, X_train, pd.Series(y_train)),
-            space=space,
-            algo=tpe.suggest,
-            max_evals=MAX_EVALS_BAYESIAN,
-            rstate=np.random.default_rng(RAND_SEED),
-        )
-    
+    best = fmin(
+        lambda params: objective(params, X_train, y_train, X_val, y_val),
+        space,
+        algo=tpe.suggest,
+        max_evals=10,
+        rstate=np.random.default_rng(RAND_SEED)
+    )
     params = space_eval(space, best) # Guardamos los hiperparámetros ganadores.
     print("\nBest hyperparameters found:")
     print(params)
@@ -295,8 +222,7 @@ def main():
     # Display top 20 feature importances
     print("\nExtracting and sorting feature importances...")
     importances = model.feature_importances_
-    imp_series = pd.Series(importances, index=model.get_booster().feature_names)
-    imp_series = imp_series.drop(labels=["obs_id"], errors="ignore")
+    imp_series = pd.Series(importances, index=feature_names)
     imp_sorted = imp_series.sort_values(ascending=False)
     print("\nTop 20 feature importances:")
     print(imp_sorted.head(20))
@@ -305,10 +231,11 @@ def main():
     print("\nGenerating predictions for validation set...")
     preds_val = model.predict_proba(X_val)[:, 1]
     val_score = roc_auc_score(y_val, preds_val)
-    print(f"\nValidation ROC AUC: {val_score}")
+    print(f"  → Validation ROC AUC: {val_score}")
 
     # Predict on test set
     print("\nGenerating predictions for test set...")
+    test_obs_ids = X_test["obs_id"]
     preds_proba = model.predict_proba(X_test)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
     preds_df.to_csv("modelo_benchmark.csv", index=False, sep=",")
