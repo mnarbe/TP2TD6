@@ -14,9 +14,8 @@ pd.set_option("display.max_columns", None)
 # Adjust this path if needed
 COMPETITION_PATH = ""
 RAND_SEED = 251328
-PORCENTAJE_DATASET_UTILIZADO = 0.5 # Porcentaje del dataset a utilizar (0.0-1.0)
-MAX_EVALS_BAYESIAN = 3 # Cantidad de iteraciones para la optimización bayesiana
-UTILIZA_AGRUPAMIENTO_POR_USUARIO = False # Si es True, usa GroupKFold y separa usuarios entre train/val
+PORCENTAJE_DATASET_UTILIZADO = 0.2 # Porcentaje del dataset a utilizar (0.0-1.0)
+MAX_EVALS_BAYESIAN = 20 # Cantidad de iteraciones para la optimización bayesiana
 FOLD_SPLITS = 3 # Cantidad de folds (KFold o GroupKFold)
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
@@ -157,21 +156,6 @@ def objective_KFold(params, X_train, y_train):
         aucs.append(roc_auc_score(y_va, preds))
     return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
 
-def objective_GroupKFold(params, X_train, y_train, groups):
-    """
-    CV interna sobre el train inicial (sin tocar validación).
-    """
-    gkf = GroupKFold(n_splits=FOLD_SPLITS)
-    aucs = []
-    for tr_idx, va_idx in gkf.split(X_train, y_train, groups):
-        X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
-        y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        model = train_classifier_xgboost(X_tr, y_tr, params)
-        preds = model.predict_proba(X_va)[:, 1]
-        aucs.append(roc_auc_score(y_va, preds))
-    return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
-
-
 
 
 def main():
@@ -245,45 +229,22 @@ def main():
     X_val = None
     y_val = None
     best = None
-    if(UTILIZA_AGRUPAMIENTO_POR_USUARIO == True):
-        # Guardamos groups por usuario
-        groups = X_train_inicial["username"]
 
-        # Split train vs validation asegurando separación de usuarios
-        gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=RAND_SEED)
-        tr_idx, va_idx = next(gss.split(X_train_inicial, y_train_inicial, groups))
-        X_train, X_val = X_train_inicial.iloc[tr_idx], X_train_inicial.iloc[va_idx]
-        y_train, y_val = y_train_inicial[tr_idx], y_train_inicial[va_idx]
-        groups_train = groups.iloc[tr_idx]
+    X = X.drop(columns=["obs_id"])
 
-        # Sacamos username y obs_id de features
-        X_train = X_train.drop(columns=["username", "obs_id"])
-        X_val = X_val.drop(columns=["username", "obs_id"])
-        X_test = X_test.drop(columns=["username", "obs_id"])
+    # Split train vs validation normal
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_inicial, y_train_inicial, test_size=0.2, random_state=RAND_SEED, stratify=y_train_inicial
+    )
 
-        # Optimización de hiperparametros
-        best = fmin(
-            fn=lambda params: objective_GroupKFold(params, X_train, pd.Series(y_train), groups_train),
-            space=space,
-            algo=tpe.suggest,
-            max_evals=MAX_EVALS_BAYESIAN,
-            rstate=np.random.default_rng(RAND_SEED),
-        )
-    else:
-        X = X.drop(columns=["obs_id"])
-        # Split train vs validation normal
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_train_inicial, y_train_inicial, test_size=0.2, random_state=RAND_SEED, stratify=y_train_inicial
-        )
-
-        # Optimización de hiperparametros
-        best = fmin(
-            fn=lambda params: objective_KFold(params, X_train, pd.Series(y_train)),
-            space=space,
-            algo=tpe.suggest,
-            max_evals=MAX_EVALS_BAYESIAN,
-            rstate=np.random.default_rng(RAND_SEED),
-        )
+    # Optimización de hiperparametros
+    best = fmin(
+        fn=lambda params: objective_KFold(params, X_train, pd.Series(y_train)),
+        space=space,
+        algo=tpe.suggest,
+        max_evals=MAX_EVALS_BAYESIAN,
+        rstate=np.random.default_rng(RAND_SEED),
+    )
     
     params = space_eval(space, best) # Guardamos los hiperparámetros ganadores.
     print("\nBest hyperparameters found:")
