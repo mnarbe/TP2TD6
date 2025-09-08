@@ -8,6 +8,8 @@
 - Informe
 - Gráficos y analisis de datos
 - Opcional: selección aleatoria de conj de validation (leave-one-out, k-fold, etc.)
+- Flag que detecte si es episodio o canción
+- Agregar las columnas específicas para episodio/canción
 
 ## Urgente
 - 

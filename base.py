@@ -203,13 +203,13 @@ def main():
         # 'min_samples_split': hp.uniformint('min_samples_split', 2, 20),
         # 'min_samples_leaf': hp.uniformint('min_samples_leaf', 1, 20),
         # 'min_impurity_decrease': hp.uniform('min_impurity_decrease', 0, 0.1),
-        'max_depth': hp.uniformint('max_depth', 3, 50),
+        'max_depth': hp.uniformint('max_depth', 3, 25),
         'gamma': hp.uniform('gamma', 0, 5),                    # Regularización, suele estar entre 0 y 5
         'learning_rate': hp.uniform('learning_rate', 0.01, 0.3), # Típico entre 0.01 y 0.3
         'reg_lambda': hp.uniform('reg_lambda', 0, 2),           # Regularización L2, 0 a 2
         'subsample': hp.uniform('subsample', 0.5, 1),           # Fracción de muestras, 0.5 a 1
         'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1), # Fracción de columnas, 0.5 a 1
-        'n_estimators': hp.uniformint('n_estimators', 50, 500), # Número de árboles, 50 a 500
+        'n_estimators': hp.uniformint('n_estimators', 10, 100), # Número de árboles, 10 a 100
         'min_child_weight': hp.uniformint('min_child_weight', 1, 10) # Peso mínimo de hijos, 1 a 10
     }
 
