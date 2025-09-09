@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import numpy as np
 import math
+import time
 from scipy import sparse
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, KFold, GroupKFold, GroupShuffleSplit
@@ -13,9 +14,10 @@ pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
 COMPETITION_PATH = ""
-RAND_SEED = 251328
-PORCENTAJE_DATASET_UTILIZADO = 0.2 # Porcentaje del dataset a utilizar (0.0-1.0)
-MAX_EVALS_BAYESIAN = 20 # Cantidad de iteraciones para la optimización bayesiana
+RAND_SEED = 251
+RAND_SEED_2 = 328
+PORCENTAJE_DATASET_UTILIZADO = 0.3 # Porcentaje del dataset a utilizar (0.0-1.0)
+MAX_EVALS_BAYESIAN = 10 # Cantidad de iteraciones para la optimización bayesiana
 FOLD_SPLITS = 3 # Cantidad de folds (KFold o GroupKFold)
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
@@ -56,8 +58,8 @@ def cast_column_types(df):
         "reason_end": "category",
         "username": "category",
         "spotify_track_uri": "string",
-        "episode_name": "string",
-        "episode_show_name": "string",
+        "episode_name": "category",
+        "episode_show_name": "category",
         "spotify_episode_uri": "string",
         "audiobook_title": "string",
         "audiobook_uri": "string",
@@ -137,10 +139,22 @@ def train_classifier_xgboost(X_train, y_train, params=None):
     model.fit(X_train, y_train)
     return model
 
-# def objective(params, X_train, y_train, X_valid, y_valid):
-#     tree = train_classifier_xgboost(X_train, y_train, params)
-#     score = cross_val_score(tree, X_valid, y_valid, cv=KFold(5), scoring="roc_auc").mean()
-#     return {'loss': 1 - score, 'status': STATUS_OK}
+def train_classifier_xgboost_val(X_train, y_train, X_val, y_val, params=None):
+    """
+    Train a Classifier 
+    """
+
+    model = xgb.XGBClassifier(objective = 'binary:logistic',
+                                seed = RAND_SEED,
+                                eval_metric = 'auc',
+                                enable_categorical=True,
+                                **params)
+
+    model.fit(
+        X_train, y_train,
+        eval_set=[(X_val, y_val)]
+    )
+    return model
 
 def objective_KFold(params, X_train, y_train):
     """
@@ -151,7 +165,7 @@ def objective_KFold(params, X_train, y_train):
     for tr_idx, va_idx in kf.split(X_train, y_train):
         X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
         y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        model = train_classifier_xgboost(X_tr, y_tr, params)
+        model = train_classifier_xgboost_val(X_tr, y_tr, X_va, y_va, params)
         preds = model.predict_proba(X_va)[:, 1]
         aucs.append(roc_auc_score(y_va, preds))
     return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
@@ -159,6 +173,7 @@ def objective_KFold(params, X_train, y_train):
 
 
 def main():
+    start = time.time()
     print("=== Starting pipeline ===")
 
     # Load and preprocess data
@@ -192,24 +207,21 @@ def main():
         "platform",
         "conn_country",
         "ip_addr",
-        "master_metadata_album_artist_name"
+        "master_metadata_album_artist_name",
+        "master_metadata_track_name",
+        "episode_name",
     ]
     df = df[to_keep]
 
     # Define hyperparameter search space
     space = {
-        # 'criterion': hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
-        # 'splitter': hp.choice('splitter', ['best', 'random']),
-        # 'min_samples_split': hp.uniformint('min_samples_split', 2, 20),
-        # 'min_samples_leaf': hp.uniformint('min_samples_leaf', 1, 20),
-        # 'min_impurity_decrease': hp.uniform('min_impurity_decrease', 0, 0.1),
-        'max_depth': hp.uniformint('max_depth', 3, 25),
-        'gamma': hp.uniform('gamma', 0, 5),                    # Regularización, suele estar entre 0 y 5
-        'learning_rate': hp.uniform('learning_rate', 0.01, 0.3), # Típico entre 0.01 y 0.3
-        'reg_lambda': hp.uniform('reg_lambda', 0, 2),           # Regularización L2, 0 a 2
+        'max_depth': hp.uniformint('max_depth', 3, 30),
+        'gamma': hp.uniform('gamma', 0, 4),                    # Regularización, suele estar entre 0 y 4
+        'learning_rate': hp.uniform('learning_rate', 0.01, 0.2), # Típico entre 0.01 y 0.2
+        'reg_lambda': hp.uniform('reg_lambda', 0, 4),           # Regularización L2, 0 a 4
         'subsample': hp.uniform('subsample', 0.5, 1),           # Fracción de muestras, 0.5 a 1
         'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 1), # Fracción de columnas, 0.5 a 1
-        'n_estimators': hp.uniformint('n_estimators', 10, 100), # Número de árboles, 10 a 100
+        'n_estimators': hp.uniformint('n_estimators', 10, 150), # Número de árboles, 10 a 150
         'min_child_weight': hp.uniformint('min_child_weight', 1, 10) # Peso mínimo de hijos, 1 a 10
     }
 
@@ -243,7 +255,7 @@ def main():
         space=space,
         algo=tpe.suggest,
         max_evals=MAX_EVALS_BAYESIAN,
-        rstate=np.random.default_rng(RAND_SEED),
+        rstate=np.random.default_rng(RAND_SEED_2),
     )
     
     params = space_eval(space, best) # Guardamos los hiperparámetros ganadores.
@@ -251,7 +263,7 @@ def main():
     print(params)
 
     # Train model
-    model = train_classifier_xgboost(X_train, y_train, params)
+    model = train_classifier_xgboost_val(X_train, y_train, X_val, y_val, params)
 
     # Display top 20 feature importances
     print("\nExtracting and sorting feature importances...")
@@ -276,6 +288,8 @@ def main():
     print(f"  → Predictions written to 'modelo_benchmark.csv'")
 
     print("=== Pipeline complete ===")
+    end = time.time()
+    print(f'Tiempo transcurrido: {str(end - start)} segundos')
 
 
 if __name__ == "__main__":
