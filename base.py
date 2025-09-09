@@ -42,6 +42,20 @@ def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     print(f"  → Concatenated DataFrame: {combined.shape[0]} rows")
     return combined
 
+def momento_del_dia(hora):
+    if 6 <= hora < 10:
+        return "morning"
+    elif 10 <= hora < 14:
+        return "noon"
+    elif 14 <= hora < 18:
+        return "afternoon"
+    elif 18 <= hora < 22:
+        return "evening"
+    elif 22 <= hora < 24:
+        return "late_night"
+    else:
+        return "early_morning"
+
 
 def cast_column_types(df):
     """
@@ -49,7 +63,7 @@ def cast_column_types(df):
     """
     print("Casting column types and parsing datetime fields...")
     dtype_map = {
-        "platform": "category",
+        #"platform": "category",
         "conn_country": "category",
         "ip_addr": "category",
         "master_metadata_track_name": "category",
@@ -68,7 +82,7 @@ def cast_column_types(df):
         "shuffle": bool,
         "offline": bool,
         "incognito_mode": bool,
-        "obs_id": int,
+        "obs_id": int
     }
 
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
@@ -171,7 +185,6 @@ def objective_KFold(params, X_train, y_train):
     return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
 
 
-
 def main():
     start = time.time()
     print("=== Starting pipeline ===")
@@ -180,14 +193,24 @@ def main():
     df = load_competition_datasets(
         COMPETITION_PATH, sample_frac=PORCENTAJE_DATASET_UTILIZADO, random_state=RAND_SEED
     )
+    
     df = cast_column_types(df)
+    #Agrego mes
+    df["month_played"] = df["ts"].dt.month.astype("uint8")
 
-    # Generate user order column
-    df = df.sort_values(["username", "ts"])
+    #Agrego hora --> rango horario: madrugada, mañana, mediodia, tarde, noche, muy noche
+    df["time_of_day"] = df["ts"].dt.hour.apply(momento_del_dia).astype("category")
+    
+    #Agrego flag podcast vs track: podemos hacerla una sola flag que sea true si es cancion, false si es podcast. La dejo así por si acaso por si genera un error unirlas.
+    df["is_track"] = df["master_metadata_track_name"].notna().astype("uint8")
+    df["is_podcast"] = df["episode_name"].notna().astype("uint8")
+    
+    #Hago que solo lea la primera palabra de platform (así no separa cada windows, por ejemplo)
+    df["operative_system"] = df["platform"].str.strip().str.split(n=1).str[0].astype("category")
+    
     # df["user_order"] = df.groupby("username", observed=True).cumcount() + 1
     df = df.sort_values(["obs_id"])
 
-    
     # Create target and test mask
     print("Creating 'target' and 'is_test' columns...")
     df["target"] = (df["reason_end"] == "fwdbtn").astype(int)
@@ -204,13 +227,19 @@ def main():
         "offline",
         "shuffle",
         "username",
-        "platform",
         "conn_country",
         "ip_addr",
         "master_metadata_album_artist_name",
-        "master_metadata_track_name",
-        "episode_name",
+        "master_metadata_track_name", #droppear porque ya tenemos la flag?
+        "episode_name", #droppear porque ya tenemos la flag?
+        #"ts",
+        "month_played",
+        "time_of_day",
+        "is_track",
+        "is_podcast",
+        "operative_system"
     ]
+    
     df = df[to_keep]
 
     # Define hyperparameter search space
