@@ -17,7 +17,7 @@ RAND_SEED = 251
 RAND_SEED_2 = 328
 PORCENTAJE_DATASET_UTILIZADO = 0.3 # Porcentaje del dataset a utilizar (0.0-1.0)
 MAX_EVALS_BAYESIAN = 10 # Cantidad de iteraciones para la optimización bayesiana
-FOLD_SPLITS = 5 # Cantidad de folds (KFold o GroupKFold)
+FOLD_SPLITS = 3 # Cantidad de folds (KFold o GroupKFold)
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     """
@@ -84,6 +84,7 @@ def cast_column_types(df):
         "obs_id": int
     }
 
+    # Formateo ts a tipo datetime
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
     df["offline_timestamp"] = pd.to_datetime(
         df["offline_timestamp"], unit="s", errors="coerce", utc=True
@@ -201,6 +202,34 @@ def kfold_mean(key_ser, target_ser, tr_idx, va_idx):
     mean_map = target_ser.iloc[tr_idx].groupby(key_ser.iloc[tr_idx]).mean()
     # assign to val rows
     return key_ser.iloc[va_idx].map(mean_map)
+
+
+
+
+# Realiza cross-validation agurpada por usuario
+# utilizando GroupKFold, para evitar data leakage entre folds que puedan compartir
+# información de un mismo usuario.
+#
+# Parámetros:
+#   - params: diccionario de hiperparámetros para el modelo XGBoost.
+#   - X_train: DataFrame de entrenamiento con las features.
+#   - y_train: Serie con las etiquetas objetivo.
+#   - groups: vector/Serie que indica el grupo (usuario) de cada muestra.
+#
+# Proceso:
+#   1. Se inicializa GroupKFold para dividir los datos en FOLD_SPLITS splits,
+#      asegurando que los grupos (usuarios) no se repitan entre train y validation.
+#   2. Para cada fold:
+#       a. Se separan los índices de train y validation.
+#       b. Se recalculan features de proporciones (por ejemplo, proporción de
+#          "backbtn" o "done") solo usando los datos de train del fold, y se
+#          asignan a train y validation usando solo información de train (evitando
+#          fuga de información).
+#       c. Se rellenan los valores NaN (por claves no vistas en train) con la media
+#          global del fold.
+#       d. Se entrena el modelo con los datos de train y se evalúa en validation.
+#       e. Se calcula el AUC para el fold y se almacena.
+#   3. Al final, se reporta el AUC promedio y su desviación estándar.
 
 def objective_GroupKFold(params, X_train, y_train, groups):
     """
@@ -352,6 +381,7 @@ def main():
     df["is_trackdone"] = df["reason_end"].eq("trackdone").astype("uint8")
     df["is_endplay"] = df["reason_end"].eq("endplay").astype("uint8")
     
+    
     df.drop(columns=["reason_end"], inplace=True)
     print("  -> 'target' and 'is_test' created, dropped 'reason_end' column.")
     
@@ -366,6 +396,7 @@ def main():
     df["day_of_week"] = df["ts"].dt.dayofweek.astype("uint8")
     df["hour"] = df["ts"].dt.hour.astype("uint8")
     df["time_of_day"] = df["ts"].dt.hour.apply(momento_del_dia).astype("category")
+    df["is_2024"] = df["ts"].dt.year.astype("bool") #habría que decidir si queremos que se especifique en 2024 o no
     
     # Content type flags
     df["is_track"] = df["master_metadata_track_name"].notna().astype("uint8")
@@ -408,7 +439,7 @@ def main():
         "is_backbtn",
         "is_trackdone",
         "is_endplay",
-        
+        "is_2024"
     ]
     
     df = df[to_keep]

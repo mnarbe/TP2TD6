@@ -9,6 +9,7 @@
 - Gráficos y analisis de datos
 - Opcional: selección aleatoria de conj de validation (leave-one-out, k-fold, etc.)
 - Agregar las columnas específicas para episodio/canción
+- Test solo usa canciones en 2024 --> darle más importancia a eso!!!
 
 ## Urgente
 - 
