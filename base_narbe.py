@@ -12,7 +12,6 @@ from hyperopt import hp, fmin, tpe, space_eval, STATUS_OK
 
 pd.set_option("display.max_columns", None)
 
-
 COMPETITION_PATH = ""
 RAND_SEED = 251
 RAND_SEED_2 = 328
@@ -197,59 +196,11 @@ def objective_KFold(params, X_train, y_train):
     
     return {"loss": 1 - mean_auc, "status": STATUS_OK}
 
-def create_user_features(df, train_mask):
-    """
-    Create user-level features using ONLY training data to avoid data leakage.
-    """
-    print("Creating user-level features (using only training data)...")
-    
-    # Use only training data for user statistics
-    train_df = df[train_mask].copy()
-    
-    # User behavior statistics
-    user_stats = (
-        train_df.groupby("username", observed=True)
-        .agg(
-            user_total_plays=("obs_id", "count"),
-            user_skip_rate=("target", "mean"),
-            user_track_rate=("is_track", "mean"),
-            user_podcast_rate=("is_podcast", "mean"),
-            user_audiobook_rate=("is_audiobook", "mean"),
-            user_avg_time_between_plays=("time_since_last_play", "mean"),
-            user_offline_rate=("offline", "mean"),
-            user_shuffle_rate=("shuffle", "mean"),
-            user_incognito_rate=("incognito_mode", "mean"),
-            user_nunique_artists=("master_metadata_album_artist_name", pd.Series.nunique),
-            user_nunique_countries=("conn_country", pd.Series.nunique),
-            user_nunique_ips=("ip_addr", pd.Series.nunique),
-        )
-    )
-    
-    # Fill missing values
-    user_stats = user_stats.fillna(0)
-    
-    # Time-of-day preferences
-    tod_stats = (
-        train_df.groupby(["username", "time_of_day"], observed=True)["obs_id"]
-        .count()
-        .unstack(fill_value=0)
-    )
-    tod_totals = tod_stats.sum(axis=1)
-    tod_proportions = tod_stats.div(tod_totals, axis=0).fillna(0)
-    tod_proportions.columns = [f"user_tod_share_{col}" for col in tod_proportions.columns]
-    
-    # Combine all user features
-    user_features = user_stats.join(tod_proportions, how="left").fillna(0)
-    
-    # Merge back to full dataset
-    df_with_user_features = df.merge(user_features, left_on="username", right_index=True, how="left")
-    
-    # Fill missing values for users not in training set
-    user_feature_cols = user_features.columns
-    df_with_user_features[user_feature_cols] = df_with_user_features[user_feature_cols].fillna(0)
-    
-    print(f"  -> Created {len(user_feature_cols)} user-level features")
-    return df_with_user_features, user_feature_cols.tolist()
+# Calcula medias solo para los valores que están en los índices de training, sin validation -> sin data leakage
+def kfold_mean(key_ser, target_ser, tr_idx, va_idx):
+    mean_map = target_ser.iloc[tr_idx].groupby(key_ser.iloc[tr_idx]).mean()
+    # assign to val rows
+    return key_ser.iloc[va_idx].map(mean_map)
 
 def objective_GroupKFold(params, X_train, y_train, groups):
     """
@@ -259,30 +210,126 @@ def objective_GroupKFold(params, X_train, y_train, groups):
     aucs = []
     
     for fold, (tr_idx, va_idx) in enumerate(gkf.split(X_train, y_train, groups)):
-        X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
-        y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        
-        # Verificar que no hay overlap entre train y validation
-        assert len(set(tr_idx) & set(va_idx)) == 0, "Overlap between train and validation sets!"
-        
-        # Verificar que no hay usuarios compartidos entre train y validation
-        train_users = set(groups[tr_idx])
-        val_users = set(groups[va_idx])
-        assert len(train_users & val_users) == 0, "Users appear in both train and validation!"
-        
-        model = train_classifier_xgboost_val(X_tr, y_tr, X_va, y_va, params)
-        preds = model.predict_proba(X_va)[:, 1]
+        # split into train/val for this fold
+        X_tr = X_train.iloc[tr_idx].copy()
+        X_va = X_train.iloc[va_idx].copy()
+        y_tr = y_train.iloc[tr_idx]
+        y_va = y_train.iloc[va_idx]
+
+        # backbtn proportions
+        m = X_tr["is_backbtn"].groupby(X_tr["spotify_track_uri"]).mean()
+        X_tr["track_repeat_prop"] = X_tr["spotify_track_uri"].map(m)
+        X_va["track_repeat_prop"] = X_va["spotify_track_uri"].map(m)
+
+        m = X_tr["is_backbtn"].groupby(X_tr["spotify_episode_uri"]).mean()
+        X_tr["episode_repeat_prop"] = X_tr["spotify_episode_uri"].map(m)
+        X_va["episode_repeat_prop"] = X_va["spotify_episode_uri"].map(m)
+
+        m = X_tr["is_backbtn"].groupby(X_tr["audiobook_uri"]).mean()
+        X_tr["audiobook_repeat_prop"] = X_tr["audiobook_uri"].map(m)
+        X_va["audiobook_repeat_prop"] = X_va["audiobook_uri"].map(m)
+
+        # done proportions (trackdone and endplay)
+        m = X_tr["is_trackdone"].groupby(X_tr["spotify_track_uri"]).mean()
+        X_tr["track_done_prop"] = X_tr["spotify_track_uri"].map(m)
+        X_va["track_done_prop"] = X_va["spotify_track_uri"].map(m)
+
+        m = X_tr["is_endplay"].groupby(X_tr["spotify_episode_uri"]).mean()
+        X_tr["episode_done_prop"] = X_tr["spotify_episode_uri"].map(m)
+        X_va["episode_done_prop"] = X_va["spotify_episode_uri"].map(m)
+
+        m = X_tr["is_trackdone"].groupby(X_tr["audiobook_uri"]).mean()
+        X_tr["audiobook_done_prop"] = X_tr["audiobook_uri"].map(m)
+        X_va["audiobook_done_prop"] = X_va["audiobook_uri"].map(m)
+
+        # fill NaNs (unseen keys in this fold) with fold's global mean
+        for col, base in [
+            ("track_repeat_prop", "is_backbtn"),
+            ("episode_repeat_prop", "is_backbtn"),
+            ("audiobook_repeat_prop", "is_backbtn"),
+            ("track_done_prop", "is_trackdone"),
+            ("episode_done_prop", "is_endplay"),
+            ("audiobook_done_prop", "is_trackdone"),
+        ]:
+            fill = X_tr[base].mean()
+            X_tr[col] = X_tr[col].fillna(fill)
+            X_va[col] = X_va[col].fillna(fill)
+
+        drop_cols = ["spotify_track_uri","spotify_episode_uri","audiobook_uri","is_backbtn","is_trackdone","is_endplay"]
+
+        model = train_classifier_xgboost_val(
+            X_tr.drop(columns=drop_cols, errors="ignore"), y_tr,
+            X_va.drop(columns=drop_cols, errors="ignore"), y_va,
+            params
+        )
+
+        preds = model.predict_proba(X_va.drop(columns=drop_cols, errors="ignore"))[:, 1]
         fold_auc = roc_auc_score(y_va, preds)
         aucs.append(fold_auc)
-        
-        print(f"  Fold {fold+1}/{FOLD_SPLITS}: AUC = {fold_auc:.4f} (Train users: {len(train_users)}, Val users: {len(val_users)})")
-    
-    mean_auc = np.mean(aucs)
-    std_auc = np.std(aucs)
+        print(f"  Fold {fold+1}/{FOLD_SPLITS}: AUC = {fold_auc:.4f}")
+
+    mean_auc = float(np.mean(aucs))
+    std_auc = float(np.std(aucs))
     print(f"  GroupCV Mean AUC: {mean_auc:.4f} ± {std_auc:.4f}")
-    
     return {"loss": 1 - mean_auc, "status": STATUS_OK}
 
+def build_oof_proportion_features(df_train, df_test, groups_col):
+    """
+    Create out-of-fold proportion features on df_train using GroupKFold by groups_col
+    and apply full-train mappings to df_test. No leakage from validation folds or test.
+
+    Features created:
+      - track_repeat_prop: mean(is_backbtn) by spotify_track_uri
+      - episode_repeat_prop: mean(is_backbtn) by spotify_episode_uri
+      - audiobook_repeat_prop: mean(is_backbtn) by audiobook_uri
+      - track_done_prop: mean(is_trackdone) by spotify_track_uri
+      - episode_done_prop: mean(is_endplay) by spotify_episode_uri
+      - audiobook_done_prop: mean(is_trackdone) by audiobook_uri
+    """
+    specs = [
+        ("spotify_track_uri", "is_backbtn", "track_repeat_prop"),
+        ("spotify_episode_uri", "is_backbtn", "episode_repeat_prop"),
+        ("audiobook_uri", "is_backbtn", "audiobook_repeat_prop"),
+        ("spotify_track_uri", "is_trackdone", "track_done_prop"),
+        ("spotify_episode_uri", "is_endplay", "episode_done_prop"),
+        ("audiobook_uri", "is_trackdone", "audiobook_done_prop"),
+    ]
+
+    df_train = df_train.copy()
+    df_test = df_test.copy()
+
+    # Initialize columns with NaN
+    for _, _, out_col in specs:
+        if out_col not in df_train.columns:
+            df_train[out_col] = np.nan
+        if out_col not in df_test.columns:
+            df_test[out_col] = np.nan
+
+    gkf = GroupKFold(n_splits=FOLD_SPLITS)
+    groups = df_train[groups_col].values
+
+    # Out-of-fold generation on training data
+    for tr_idx, va_idx in gkf.split(df_train, groups=groups):
+        for key_col, base_col, out_col in specs:
+            # Compute fold-specific mapping from training fold only
+            mean_map = df_train.iloc[tr_idx][base_col].groupby(df_train.iloc[tr_idx][key_col]).mean()
+            # Assign to validation fold rows
+            df_train.loc[df_train.index[va_idx], out_col] = df_train.iloc[va_idx][key_col].map(mean_map).values
+
+    # Fill NaNs in OOF with global means from training
+    for key_col, base_col, out_col in specs:
+        global_mean = float(df_train[base_col].mean())
+        df_train[out_col] = df_train[out_col].fillna(global_mean)
+
+    # Build full-train maps and apply to test (no leakage)
+    full_maps = {}
+    for key_col, base_col, out_col in specs:
+        full_maps[(key_col, base_col)] = df_train[base_col].groupby(df_train[key_col]).mean()
+        global_mean = float(df_train[base_col].mean())
+        df_test[out_col] = df_test[key_col].map(full_maps[(key_col, base_col)])
+        df_test[out_col] = df_test[out_col].fillna(global_mean)
+
+    return df_train, df_test
 
 def main():
     start = time.time()
@@ -299,6 +346,12 @@ def main():
     print("Creating 'target' and 'is_test' columns...")
     df["target"] = (df["reason_end"] == "fwdbtn").astype(int)
     df["is_test"] = df["reason_end"].isna()
+    
+    # Creo flags de reason_end
+    df["is_backbtn"] = df["reason_end"].eq("backbtn").astype("uint8")
+    df["is_trackdone"] = df["reason_end"].eq("trackdone").astype("uint8")
+    df["is_endplay"] = df["reason_end"].eq("endplay").astype("uint8")
+    
     df.drop(columns=["reason_end"], inplace=True)
     print("  -> 'target' and 'is_test' created, dropped 'reason_end' column.")
     
@@ -322,15 +375,9 @@ def main():
     # Platform features
     df["operative_system"] = df["platform"].str.strip().str.split(n=1).str[0].astype("category")
     
-    # User session features (temporal within user)
-    df = df.sort_values(["username", "ts"])
-    df["user_order"] = df.groupby("username", observed=True).cumcount() + 1
-    df["time_since_last_play"] = df.groupby("username", observed=True)["ts"].diff().dt.total_seconds().fillna(0)
-    df["is_first_play_of_day"] = (df.groupby(["username", df["ts"].dt.date], observed=True)["user_order"].rank() == 1).astype("uint8")
-    
     # Sort back by obs_id
     df = df.sort_values(["obs_id"])
-
+    
     # Keep only relevant columns
     to_keep = [
         "obs_id",
@@ -343,6 +390,7 @@ def main():
         "conn_country",
         "ip_addr",
         "master_metadata_album_artist_name",
+        "master_metadata_album_album_name",
         "master_metadata_track_name",
         "episode_name",
         "month_played",
@@ -353,21 +401,16 @@ def main():
         "is_podcast",
         "is_audiobook",
         "operative_system",
-        "user_order",
-        "time_since_last_play",
-        "is_first_play_of_day"
+        # Needed for OOF target encodings
+        "spotify_track_uri",
+        "spotify_episode_uri",
+        "audiobook_uri",
+        "is_backbtn",
+        "is_trackdone",
+        "is_endplay",
+        
     ]
     
-    df = df[to_keep]
-
-    # Create train mask for user features
-    train_mask = ~df["is_test"]
-    
-    # Add user-level features (using only training data)
-    df, user_feature_cols = create_user_features(df, train_mask)
-    
-    # Update to_keep list with user features
-    to_keep.extend(user_feature_cols)
     df = df[to_keep]
 
     # Define hyperparameter search space
@@ -399,7 +442,14 @@ def main():
     y_val = None
     best = None
 
-    X = X.drop(columns=["obs_id"])
+    X = X.drop(columns=["obs_id"])  # For CV optimization below
+
+    # Build leakage-free OOF proportion features on training; apply full-train maps to test
+    X_train_inicial, X_test = build_oof_proportion_features(
+        X_train_inicial,
+        X_test,
+        groups_col="username",
+    )
 
     # Usar GroupKFold para evitar data leakage por usuario
     # Necesitamos los grupos de usuario para el GroupKFold
@@ -418,10 +468,19 @@ def main():
     print("\nBest hyperparameters found:")
     print(params)
 
+    # Drop leakage columns and raw key columns consistently for modeling
+    leak_and_key_cols = [
+        "spotify_track_uri", "spotify_episode_uri", "audiobook_uri",
+        "is_backbtn", "is_trackdone", "is_endplay", "obs_id",
+    ]
+
+    X_train_model_full = X_train_inicial.drop(columns=leak_and_key_cols, errors="ignore")
+    X_test_model = X_test.drop(columns=leak_and_key_cols, errors="ignore")
+
     # Split train vs validation normal (solo para evaluación final)
     # IMPORTANTE: Este split es solo para evaluación final, no para optimización de hiperparámetros
     X_train, X_val, y_train, y_val = train_test_split(
-        X_train_inicial, y_train_inicial, test_size=0.2, random_state=RAND_SEED, stratify=y_train_inicial
+        X_train_model_full, y_train_inicial, test_size=0.2, random_state=RAND_SEED, stratify=y_train_inicial
     )
     
     # Verificar que no hay usuarios compartidos entre train y validation final
@@ -454,7 +513,9 @@ def main():
 
     # Predict on test set
     print("\nGenerating predictions for test set...")
-    preds_proba = model.predict_proba(X_test)[:, 1]
+    # Retrain on all training data (with OOF features and dropped leakage cols) for test predictions
+    final_model = train_classifier_xgboost(X_train_model_full, pd.Series(y_train_inicial), params)
+    preds_proba = final_model.predict_proba(X_test_model)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
     preds_df.to_csv("modelo_benchmark.csv", index=False, sep=",")
     print(f"  -> Predictions written to 'modelo_benchmark.csv'")

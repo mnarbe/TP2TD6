@@ -12,13 +12,13 @@ from hyperopt import hp, fmin, tpe, space_eval, STATUS_OK
 
 pd.set_option("display.max_columns", None)
 
-
+# Adjust this path if needed
 COMPETITION_PATH = ""
 RAND_SEED = 251
 RAND_SEED_2 = 328
 PORCENTAJE_DATASET_UTILIZADO = 0.3 # Porcentaje del dataset a utilizar (0.0-1.0)
 MAX_EVALS_BAYESIAN = 10 # Cantidad de iteraciones para la optimización bayesiana
-FOLD_SPLITS = 5 # Cantidad de folds (KFold o GroupKFold)
+FOLD_SPLITS = 3 # Cantidad de folds (KFold o GroupKFold)
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     """
@@ -39,7 +39,7 @@ def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
 
     # Concatenate and reset index
     combined = pd.concat([train_df, test_df], ignore_index=True)
-    print(f"  -> Concatenated DataFrame: {combined.shape[0]} rows")
+    print(f"  --> Concatenated DataFrame: {combined.shape[0]} rows")
     return combined
 
 def momento_del_dia(hora):
@@ -90,7 +90,7 @@ def cast_column_types(df):
         df["offline_timestamp"], unit="s", errors="coerce", utc=True
     )
     df = df.astype(dtype_map)
-    print("  -> Column types cast successfully.")
+    print("  --> Column types cast successfully.")
     return df
 
 
@@ -107,8 +107,8 @@ def split_train_test(X, y, test_mask):
     y_train = y[train_mask]
     y_test = y[test_mask]
 
-    print(f"  -> Training set: {X_train.shape[0]} rows")
-    print(f"  -> Test set:     {X_test.shape[0]} rows")
+    print(f"  --> Training set: {X_train.shape[0]} rows")
+    print(f"  --> Test set:     {X_test.shape[0]} rows")
     return X_train, X_test, y_train, y_test
 
 
@@ -134,9 +134,9 @@ def train_classifier_basic(X_train, y_train, params=None):
 
     model = RandomForestClassifier(**rf_params)
 
-    print("  -> Fitting RandomForestClassifier...")
+    print("  --> Fitting RandomForestClassifier...")
     model.fit(X_train, y_train)
-    print("  -> Model training complete.")
+    print("  --> Model training complete.")
     return model
 
 def train_classifier_xgboost(X_train, y_train, params=None):
@@ -176,112 +176,13 @@ def objective_KFold(params, X_train, y_train):
     """
     kf = KFold(n_splits=FOLD_SPLITS, shuffle=True, random_state=RAND_SEED)
     aucs = []
-    
-    for fold, (tr_idx, va_idx) in enumerate(kf.split(X_train, y_train)):
+    for tr_idx, va_idx in kf.split(X_train, y_train):
         X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
         y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        
-        # Verificar que no hay overlap entre train y validation
-        assert len(set(tr_idx) & set(va_idx)) == 0, "Overlap between train and validation sets!"
-        
         model = train_classifier_xgboost_val(X_tr, y_tr, X_va, y_va, params)
         preds = model.predict_proba(X_va)[:, 1]
-        fold_auc = roc_auc_score(y_va, preds)
-        aucs.append(fold_auc)
-        
-        print(f"  Fold {fold+1}/{FOLD_SPLITS}: AUC = {fold_auc:.4f}")
-    
-    mean_auc = np.mean(aucs)
-    std_auc = np.std(aucs)
-    print(f"  CV Mean AUC: {mean_auc:.4f} ± {std_auc:.4f}")
-    
-    return {"loss": 1 - mean_auc, "status": STATUS_OK}
-
-def create_user_features(df, train_mask):
-    """
-    Create user-level features using ONLY training data to avoid data leakage.
-    """
-    print("Creating user-level features (using only training data)...")
-    
-    # Use only training data for user statistics
-    train_df = df[train_mask].copy()
-    
-    # User behavior statistics
-    user_stats = (
-        train_df.groupby("username", observed=True)
-        .agg(
-            user_total_plays=("obs_id", "count"),
-            user_skip_rate=("target", "mean"),
-            user_track_rate=("is_track", "mean"),
-            user_podcast_rate=("is_podcast", "mean"),
-            user_audiobook_rate=("is_audiobook", "mean"),
-            user_avg_time_between_plays=("time_since_last_play", "mean"),
-            user_offline_rate=("offline", "mean"),
-            user_shuffle_rate=("shuffle", "mean"),
-            user_incognito_rate=("incognito_mode", "mean"),
-            user_nunique_artists=("master_metadata_album_artist_name", pd.Series.nunique),
-            user_nunique_countries=("conn_country", pd.Series.nunique),
-            user_nunique_ips=("ip_addr", pd.Series.nunique),
-        )
-    )
-    
-    # Fill missing values
-    user_stats = user_stats.fillna(0)
-    
-    # Time-of-day preferences
-    tod_stats = (
-        train_df.groupby(["username", "time_of_day"], observed=True)["obs_id"]
-        .count()
-        .unstack(fill_value=0)
-    )
-    tod_totals = tod_stats.sum(axis=1)
-    tod_proportions = tod_stats.div(tod_totals, axis=0).fillna(0)
-    tod_proportions.columns = [f"user_tod_share_{col}" for col in tod_proportions.columns]
-    
-    # Combine all user features
-    user_features = user_stats.join(tod_proportions, how="left").fillna(0)
-    
-    # Merge back to full dataset
-    df_with_user_features = df.merge(user_features, left_on="username", right_index=True, how="left")
-    
-    # Fill missing values for users not in training set
-    user_feature_cols = user_features.columns
-    df_with_user_features[user_feature_cols] = df_with_user_features[user_feature_cols].fillna(0)
-    
-    print(f"  -> Created {len(user_feature_cols)} user-level features")
-    return df_with_user_features, user_feature_cols.tolist()
-
-def objective_GroupKFold(params, X_train, y_train, groups):
-    """
-    CV interna agrupando por usuario para evitar data leakage.
-    """
-    gkf = GroupKFold(n_splits=FOLD_SPLITS)
-    aucs = []
-    
-    for fold, (tr_idx, va_idx) in enumerate(gkf.split(X_train, y_train, groups)):
-        X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
-        y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        
-        # Verificar que no hay overlap entre train y validation
-        assert len(set(tr_idx) & set(va_idx)) == 0, "Overlap between train and validation sets!"
-        
-        # Verificar que no hay usuarios compartidos entre train y validation
-        train_users = set(groups[tr_idx])
-        val_users = set(groups[va_idx])
-        assert len(train_users & val_users) == 0, "Users appear in both train and validation!"
-        
-        model = train_classifier_xgboost_val(X_tr, y_tr, X_va, y_va, params)
-        preds = model.predict_proba(X_va)[:, 1]
-        fold_auc = roc_auc_score(y_va, preds)
-        aucs.append(fold_auc)
-        
-        print(f"  Fold {fold+1}/{FOLD_SPLITS}: AUC = {fold_auc:.4f} (Train users: {len(train_users)}, Val users: {len(val_users)})")
-    
-    mean_auc = np.mean(aucs)
-    std_auc = np.std(aucs)
-    print(f"  GroupCV Mean AUC: {mean_auc:.4f} ± {std_auc:.4f}")
-    
-    return {"loss": 1 - mean_auc, "status": STATUS_OK}
+        aucs.append(roc_auc_score(y_va, preds))
+    return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
 
 
 def main():
@@ -294,45 +195,71 @@ def main():
     )
     
     df = cast_column_types(df)
+    #Agrego mes
+    df["month_played"] = df["ts"].dt.month.astype("uint8")
+
+    #Agrego hora --> rango horario: madrugada, mañana, mediodia, tarde, noche, muy noche
+    df["time_of_day"] = df["ts"].dt.hour.apply(momento_del_dia).astype("category")
     
-    # Create target and test mask FIRST to avoid data leakage
+    #Agrego flag podcast vs track: podemos hacerla una sola flag que sea true si es cancion, false si es podcast. La dejo así por si acaso por si genera un error unirlas.
+    df["is_track"] = df["master_metadata_track_name"].notna().astype("uint8")
+    df["is_podcast"] = df["episode_name"].notna().astype("uint8")
+    
+    #Hago que solo lea la primera palabra de platform (así no separa cada windows, por ejemplo)
+    df["operative_system"] = df["platform"].str.strip().str.split(n=1).str[0].astype("category")
+    
+    # ========= SECCION  POR USUARIO =========
+    #Skip rate por usuario:
+    # - user_play_count: cantidad total de eventos del usuario
+    # - user_nunique_artist/ip/country: diversidad del usuario
+    # - user_track_share / user_podcast_share: proporción de consumo por tipo de contenido
+    # - user_tod_share_*: distribución de consumo por franja horaria
+
+    user_overall = (
+        df.groupby("username", observed=True)
+          .agg(
+              user_play_count=("obs_id", "count"),
+              user_nunique_artist=("master_metadata_album_artist_name", pd.Series.nunique),
+              user_nunique_ip=("ip_addr", pd.Series.nunique),
+              user_nunique_country=("conn_country", pd.Series.nunique),
+              user_track_share=("is_track", "mean"),
+              user_podcast_share=("is_podcast", "mean")
+          )
+    )
+    user_overall["user_play_count"] = user_overall["user_play_count"].astype("int32")
+    user_overall["user_nunique_artist"] = user_overall["user_nunique_artist"].fillna(0).astype("int32")
+    user_overall["user_nunique_ip"] = user_overall["user_nunique_ip"].fillna(0).astype("int32")
+    user_overall["user_nunique_country"] = user_overall["user_nunique_country"].fillna(0).astype("int32")
+    user_overall["user_track_share"] = user_overall["user_track_share"].fillna(0).astype("float32")
+    user_overall["user_podcast_share"] = user_overall["user_podcast_share"].fillna(0).astype("float32")
+
+    # Distribución por franja horaria (proporciones que suman ~1 por usuario)
+    tod_counts = (
+        df.groupby(["username", "time_of_day"], observed=True)["obs_id"].count().rename("count")
+    )
+    tod_total = tod_counts.groupby(level=0).sum().rename("total")
+    user_time_share = (tod_counts / tod_total).unstack(fill_value=0.0)
+    user_time_share.columns = [f"user_tod_share_{str(col)}" for col in user_time_share.columns]
+
+    # Combinar todas las features de usuario
+    user_features = user_overall.join(user_time_share, how="left")
+
+    # Merge back to df
+    df = df.merge(user_features, how="left", left_on="username", right_index=True)
+     
+     
+    # df["user_order"] = df.groupby("username", observed=True).cumcount() + 1
+    df = df.sort_values(["obs_id"])
+
+    # Create target and test mask
     print("Creating 'target' and 'is_test' columns...")
     df["target"] = (df["reason_end"] == "fwdbtn").astype(int)
     df["is_test"] = df["reason_end"].isna()
     df.drop(columns=["reason_end"], inplace=True)
-    print("  -> 'target' and 'is_test' created, dropped 'reason_end' column.")
-    
-    # Sort by obs_id to maintain order
-    df = df.sort_values(["obs_id"])
-    
-    # ========= FEATURE ENGINEERING =========
-    print("Creating features...")
-    
-    # Temporal features
-    df["month_played"] = df["ts"].dt.month.astype("uint8")
-    df["day_of_week"] = df["ts"].dt.dayofweek.astype("uint8")
-    df["hour"] = df["ts"].dt.hour.astype("uint8")
-    df["time_of_day"] = df["ts"].dt.hour.apply(momento_del_dia).astype("category")
-    
-    # Content type flags
-    df["is_track"] = df["master_metadata_track_name"].notna().astype("uint8")
-    df["is_podcast"] = df["episode_name"].notna().astype("uint8")
-    df["is_audiobook"] = df["audiobook_title"].notna().astype("uint8")
-    
-    # Platform features
-    df["operative_system"] = df["platform"].str.strip().str.split(n=1).str[0].astype("category")
-    
-    # User session features (temporal within user)
-    df = df.sort_values(["username", "ts"])
-    df["user_order"] = df.groupby("username", observed=True).cumcount() + 1
-    df["time_since_last_play"] = df.groupby("username", observed=True)["ts"].diff().dt.total_seconds().fillna(0)
-    df["is_first_play_of_day"] = (df.groupby(["username", df["ts"].dt.date], observed=True)["user_order"].rank() == 1).astype("uint8")
-    
-    # Sort back by obs_id
-    df = df.sort_values(["obs_id"])
+    print("  --> 'target' and 'is_test' created, dropped 'reason_end' column.")
 
     # Keep only relevant columns
-    to_keep = [
+    base_keep = [
         "obs_id",
         "target",
         "is_test",
@@ -343,31 +270,32 @@ def main():
         "conn_country",
         "ip_addr",
         "master_metadata_album_artist_name",
-        "master_metadata_track_name",
-        "episode_name",
+        "master_metadata_track_name", #droppear porque ya tenemos la flag?
+        "episode_name", #droppear porque ya tenemos la flag?
+        #"ts",
         "month_played",
-        "day_of_week",
-        "hour",
         "time_of_day",
         "is_track",
         "is_podcast",
-        "is_audiobook",
-        "operative_system",
-        "user_order",
-        "time_since_last_play",
-        "is_first_play_of_day"
+        "operative_system"
     ]
     
-    df = df[to_keep]
-
-    # Create train mask for user features
-    train_mask = ~df["is_test"]
+    #completo los to_keep
+    to_keep = base_keep + [
+        "user_play_count",
+        "user_nunique_artist",
+        "user_nunique_ip", 
+        "user_nunique_country",
+        "user_track_share",
+        "user_podcast_share",
+        "user_tod_share_morning",
+        "user_tod_share_noon", 
+        "user_tod_share_afternoon",
+        "user_tod_share_evening",
+        "user_tod_share_late_night",
+        "user_tod_share_early_morning"
+    ]
     
-    # Add user-level features (using only training data)
-    df, user_feature_cols = create_user_features(df, train_mask)
-    
-    # Update to_keep list with user features
-    to_keep.extend(user_feature_cols)
     df = df[to_keep]
 
     # Define hyperparameter search space
@@ -401,13 +329,14 @@ def main():
 
     X = X.drop(columns=["obs_id"])
 
-    # Usar GroupKFold para evitar data leakage por usuario
-    # Necesitamos los grupos de usuario para el GroupKFold
-    train_groups = X_train_inicial["username"].values
-    
-    # Optimización de hiperparametros usando GroupKFold en todo el training data
+    # Split train vs validation normal
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_inicial, y_train_inicial, test_size=0.2, random_state=RAND_SEED, stratify=y_train_inicial
+    )
+
+    # Optimización de hiperparametros
     best = fmin(
-        fn=lambda params: objective_GroupKFold(params, X_train_inicial, pd.Series(y_train_inicial), train_groups),
+        fn=lambda params: objective_KFold(params, X_train, pd.Series(y_train)),
         space=space,
         algo=tpe.suggest,
         max_evals=MAX_EVALS_BAYESIAN,
@@ -418,23 +347,7 @@ def main():
     print("\nBest hyperparameters found:")
     print(params)
 
-    # Split train vs validation normal (solo para evaluación final)
-    # IMPORTANTE: Este split es solo para evaluación final, no para optimización de hiperparámetros
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_train_inicial, y_train_inicial, test_size=0.2, random_state=RAND_SEED, stratify=y_train_inicial
-    )
-    
-    # Verificar que no hay usuarios compartidos entre train y validation final
-    train_users = set(X_train["username"].unique())
-    val_users = set(X_val["username"].unique())
-    shared_users = train_users & val_users
-    if shared_users:
-        print(f"WARNING: {len(shared_users)} users appear in both final train and validation sets!")
-        print("This could cause overoptimistic validation scores.")
-    else:
-        print("✓ No users shared between final train and validation sets")
-
-    # Train final model con los mejores hiperparámetros
+    # Train model
     model = train_classifier_xgboost_val(X_train, y_train, X_val, y_val, params)
 
     # Display top 20 feature importances
@@ -457,7 +370,7 @@ def main():
     preds_proba = model.predict_proba(X_test)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
     preds_df.to_csv("modelo_benchmark.csv", index=False, sep=",")
-    print(f"  -> Predictions written to 'modelo_benchmark.csv'")
+    print(f"  --> Predictions written to 'modelo_benchmark.csv'")
 
     print("=== Pipeline complete ===")
     end = time.time()
