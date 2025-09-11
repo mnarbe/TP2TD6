@@ -16,7 +16,7 @@ RAND_SEED = 251
 RAND_SEED_2 = 328
 PORCENTAJE_DATASET_UTILIZADO = 0.3
 MAX_EVALS_BAYESIAN = 10
-FOLD_SPLITS = 3
+FOLD_SPLITS = 5
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     print("Loading competition datasets from:", data_dir)
@@ -51,9 +51,35 @@ def cast_column_types(df):
 
     # Mantener datetime para feature engineering
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
+    
     df["offline_timestamp"] = pd.to_datetime(df["offline_timestamp"], errors="coerce", utc=True)
     df["release_date"] = pd.to_datetime(df["release_date"], errors="coerce")
     df["album_release_date"] = pd.to_datetime(df["album_release_date"], errors="coerce")
+    
+    # Hago variables que combinen otras:
+    # Horario + Tipo de contenido
+    df["time_track"] = (df["time_of_day"].astype(str) + "_" + df["is_track"].astype(str)).astype("category")
+    df["time_podcast"] = (df["time_of_day"].astype(str) + "_" + df["is_podcast"].astype(str)).astype("category")
+
+    # Usuario + Plataforma
+    df["user_os"] = (df["username"].astype(str) + "_" + df["operative_system"].astype(str)).astype("category")
+    df["user_shuffle"] = (df["username"].astype(str) + "_" + df["shuffle"].astype(str)).astype("category")
+
+    # País + Dispositivo / Plataforma
+    df["country_os"] = (df["conn_country"].astype(str) + "_" + df["operative_system"].astype(str)).astype("category")
+    df["country_platform"] = (df["conn_country"].astype(str) + "_" + df["platform"].astype(str)).astype("category")
+
+    # Dispositivo + horario
+    df["device_time"] = (df["operative_system"].astype(str) + "_" + df["time_of_day"].astype(str)).astype("category")
+    
+    # Contenido + Popularidad
+    df["artist_popularity"] = (df["artist_name"].astype(str) + "_" + df["popularity"].astype(str)).astype("category")
+    df["show_length"] = (df["show_name"].astype(str) + "_" + df["show_total_episodes"].astype(str)).astype("category")
+
+
+    # Mes + Hora
+    df["month_hour"] = (df["month_played"].astype(str) + "_" + df["ts"].dt.hour.astype(str)).astype("category")
+
 
     # Columnas categóricas
     cat_cols = [
@@ -61,7 +87,9 @@ def cast_column_types(df):
         "master_metadata_album_artist_name", "master_metadata_album_album_name",
         "episode_name", "episode_show_name", "audiobook_title",
         "audiobook_chapter_title", "name", "album_name", "artist_name",
-        "show_name", "show_publisher"
+        "show_name", "show_publisher", "time_track", "time_podcast",
+        "user_os", "user_shuffle", "country_os", "country_platform",
+        "device_time", "artist_popularity", "show_length", "month_hour"
     ]
     for c in cat_cols:
         if c in df.columns:
@@ -142,6 +170,7 @@ def main():
     df["is_track"] = df["master_metadata_track_name"].notna().astype(bool)
     df["is_podcast"] = df["episode_name"].notna().astype(bool)
     df["operative_system"] = df["platform"].str.strip().str.split(n=1).str[0].astype("category")
+    df["is_2024"] = (df["ts"].dt.year==2024).astype(bool)
     df = df.sort_values(["obs_id"])
 
     # Target y test mask
@@ -155,7 +184,9 @@ def main():
         "operative_system","episode_name","episode_show_name","audiobook_title",
         "audiobook_chapter_title","offline_timestamp","name","duration_ms","explicit",
         "release_date","album_name","artist_name","popularity","track_number",
-        "show_name","show_publisher","show_total_episodes"
+        "show_name","show_publisher","show_total_episodes", "is_2024", "time_track", "time_podcast",
+        "user_os", "user_shuffle", "country_os", "country_platform",
+        "device_time", "artist_popularity", "show_length", "month_hour"
     ]
     df = df[to_keep]
 
