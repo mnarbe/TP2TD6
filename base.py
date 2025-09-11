@@ -291,7 +291,8 @@ def main():
     print("\nBest hyperparameters found:")
     print(params)
 
-    # Train model
+    # Train 
+    
     model = train_classifier_xgboost_val(X_train, y_train, X_val, y_val, params)
 
     # Display top 20 feature importances
