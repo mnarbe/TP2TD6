@@ -14,8 +14,8 @@ pd.set_option("display.max_columns", None)
 COMPETITION_PATH = ""
 RAND_SEED = 251
 RAND_SEED_2 = 328
-PORCENTAJE_DATASET_UTILIZADO = 0.3
-MAX_EVALS_BAYESIAN = 10
+PORCENTAJE_DATASET_UTILIZADO = 0.4
+MAX_EVALS_BAYESIAN = 20
 FOLD_SPLITS = 5
 
 # ------------------------ Funciones ------------------------
