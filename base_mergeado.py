@@ -112,10 +112,13 @@ def create_features(df):
     
     return df_new
 
-def add_user_features(X_train, X_test, y_train):
+def add_user_features(X_train, X_test):
     """Add user features without data leakage. Uses only training data for statistics."""
     X_train_new = X_train.copy()
-    X_test_new = X_test.copy()
+
+    X_test_new = None
+    if X_test is not None:
+        X_test_new = X_test.copy()
     
     # Sort training data by username and timestamp
     X_train_new = X_train_new.sort_values(["username", "ts"]).reset_index(drop=True)
@@ -139,10 +142,11 @@ def add_user_features(X_train, X_test, y_train):
     user_final_stats = X_train_new.groupby("username")["user_avg_duration"].last()
     
     # Apply to test data
-    X_test_new["user_avg_duration"] = X_test_new["username"].map(user_final_stats).fillna(global_avg_duration)
-    X_test_new["track_longer_than_user_avg"] = (
-        X_test_new["duration_ms"] > X_test_new["user_avg_duration"]
-    ).astype(int)
+    if X_test_new is not None:
+        X_test_new["user_avg_duration"] = X_test_new["username"].map(user_final_stats).fillna(global_avg_duration)
+        X_test_new["track_longer_than_user_avg"] = (
+            X_test_new["duration_ms"] > X_test_new["user_avg_duration"]
+        ).astype(int)
     
     return X_train_new, X_test_new
 
@@ -177,8 +181,12 @@ def objective_GroupKFold(params, X_train, y_train, groups):
     for i, (tr_idx, va_idx) in enumerate(gkf.split(X_train, y_train, groups)):
         X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
         y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        model = train_classifier_xgboost_val(X_tr, y_tr, X_va, y_va, params)
-        preds = model.predict_proba(X_va)[:, 1]
+
+        # Add user features
+        X_tr_2, X_va_2 = add_user_features(X_tr, X_va)
+
+        model = train_classifier_xgboost_val(X_tr_2, y_tr, X_va_2, y_va, params)
+        preds = model.predict_proba(X_va_2)[:, 1]
         auc = roc_auc_score(y_va, preds)
         aucs.append(auc)
         print(f"  -> Fold {i+1} AUC: {auc:.5f}")
@@ -205,18 +213,14 @@ def main():
     y = df["target"].to_numpy()
     X = df.drop(columns=["target", "is_test"])
 
-    X_train_inicial, X_test, y_train_inicial, y_test = split_train_test(X, y, test_mask)
-    test_obs_ids = X_test["obs_id"].copy()
+    X_train_inicial, X_test_to_predict, y_train_inicial, _ = split_train_test(X, y, test_mask)
+    test_obs_ids = X_test_to_predict["obs_id"].copy()
 
     # Now create features on each split separately
     print("Creating features on training data...")
     X_train_inicial = create_features(X_train_inicial)
     print("Creating features on test data...")
-    X_test = create_features(X_test)
-
-    # Add user features (this function now handles both train and test properly)
-    print("Adding user features...")
-    X_train_inicial, X_test = add_user_features(X_train_inicial, X_test, y_train_inicial)
+    X_test_to_predict = create_features(X_test_to_predict)
 
     # Select only the columns we need for modeling
     to_keep = [
@@ -232,20 +236,20 @@ def main():
     
     # Keep only existing columns
     X_train_inicial = X_train_inicial[[c for c in to_keep if c in X_train_inicial.columns]]
-    X_test = X_test[[c for c in to_keep if c in X_test.columns]]
+    X_test_to_predict = X_test_to_predict[[c for c in to_keep if c in X_test_to_predict.columns]]
 
     train_groups = X_train_inicial["username"].values
 
     drop_if_exists = ["obs_id", "username"]
     X_train_inicial = X_train_inicial.drop(columns=[c for c in drop_if_exists if c in X_train_inicial.columns])
-    X_test = X_test.drop(columns=[c for c in drop_if_exists if c in X_test.columns])
+    X_test_to_predict = X_test_to_predict.drop(columns=[c for c in drop_if_exists if c in X_test_to_predict.columns])
 
     date_cols = ["ts", "offline_timestamp", "release_date", "album_release_date"]
     for col in date_cols:
         if col in X_train_inicial.columns:
             X_train_inicial[col] = X_train_inicial[col].astype("int64")
-        if col in X_test.columns:
-            X_test[col] = X_test[col].astype("int64")
+        if col in X_test_to_predict.columns:
+            X_test_to_predict[col] = X_test_to_predict[col].astype("int64")
 
     space = {
         'max_depth': hp.uniformint('max_depth', 3, 30),
@@ -269,6 +273,9 @@ def main():
     print("\nBest hyperparameters found:")
     print(params)
 
+    # Ahora uso el train completo para entrenar el modelo final
+    X_train_inicial, _ = add_user_features(X_train_inicial, None)
+
     model = train_classifier_xgboost_val(X_train_inicial, y_train_inicial, None, None, params)
 
     importances = model.feature_importances_
@@ -277,7 +284,7 @@ def main():
     print("\nTop 20 feature importances:")
     print(imp_sorted.head(20))
 
-    preds_proba = model.predict_proba(X_test)[:, 1]
+    preds_proba = model.predict_proba(X_test_to_predict)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
     preds_df.to_csv("modelo_benchmark.csv", index=False)
     print(f"  -> Predictions written to 'modelo_benchmark.csv'")
