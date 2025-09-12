@@ -14,8 +14,8 @@ pd.set_option("display.max_columns", None)
 COMPETITION_PATH = ""
 RAND_SEED = 251
 RAND_SEED_2 = 328
-PORCENTAJE_DATASET_UTILIZADO = 0.4
-MAX_EVALS_BAYESIAN = 20
+PORCENTAJE_DATASET_UTILIZADO = 0.35
+MAX_EVALS_BAYESIAN = 5
 FOLD_SPLITS = 5
 
 # ------------------------ Funciones ------------------------
@@ -185,6 +185,10 @@ def objective_GroupKFold(params, X_train, y_train, groups):
         # Add user features
         X_tr_2, X_va_2 = add_user_features(X_tr, X_va)
 
+        drop_if_exists = ["username", "ts"]
+        X_tr_2 = X_tr_2.drop(columns=[c for c in drop_if_exists if c in X_tr_2.columns])
+        X_va_2 = X_va_2.drop(columns=[c for c in drop_if_exists if c in X_va_2.columns])
+
         model = train_classifier_xgboost_val(X_tr_2, y_tr, X_va_2, y_va, params)
         preds = model.predict_proba(X_va_2)[:, 1]
         auc = roc_auc_score(y_va, preds)
@@ -224,7 +228,7 @@ def main():
 
     # Select only the columns we need for modeling
     to_keep = [
-        "obs_id","incognito_mode","offline","shuffle","username",
+        "obs_id","incognito_mode","offline","shuffle","username", "ts",
         "conn_country","month_played","time_of_day","is_track","is_podcast",
         "operative_system","episode_name","episode_show_name","audiobook_title",
         "audiobook_chapter_title","offline_timestamp","name","duration_ms","explicit",
@@ -240,7 +244,7 @@ def main():
 
     train_groups = X_train_inicial["username"].values
 
-    drop_if_exists = ["obs_id", "username"]
+    drop_if_exists = ["obs_id"]
     X_train_inicial = X_train_inicial.drop(columns=[c for c in drop_if_exists if c in X_train_inicial.columns])
     X_test_to_predict = X_test_to_predict.drop(columns=[c for c in drop_if_exists if c in X_test_to_predict.columns])
 
@@ -275,6 +279,10 @@ def main():
 
     # Ahora uso el train completo para entrenar el modelo final
     X_train_inicial, _ = add_user_features(X_train_inicial, None)
+
+    drop_if_exists = ["username", "ts"]
+    X_train_inicial = X_train_inicial.drop(columns=[c for c in drop_if_exists if c in X_train_inicial.columns])
+    X_test_to_predict = X_test_to_predict.drop(columns=[c for c in drop_if_exists if c in X_test_to_predict.columns])
 
     model = train_classifier_xgboost_val(X_train_inicial, y_train_inicial, None, None, params)
 
