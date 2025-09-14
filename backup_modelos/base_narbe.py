@@ -103,13 +103,13 @@ def split_train_test(X, y, test_mask):
     train_mask = ~test_mask  # Invertir la máscara
 
     X_train = X[train_mask]
-    X_test = X[test_mask]
+    X_finaltest = X[test_mask]
     y_train = y[train_mask]
     y_test = y[test_mask]
 
     print(f"  -> Training set: {X_train.shape[0]} rows")
-    print(f"  -> Test set:     {X_test.shape[0]} rows")
-    return X_train, X_test, y_train, y_test
+    print(f"  -> Test set:     {X_finaltest.shape[0]} rows")
+    return X_train, X_finaltest, y_train, y_test
 
 
 def train_classifier_basic(X_train, y_train, params=None):
@@ -462,10 +462,10 @@ def main():
     X = df.drop(columns=["target", "is_test"])
 
     # Split data
-    X_train_inicial, X_test, y_train_inicial, _ = split_train_test(X, y, test_mask)
+    X_train_dataset, X_finaltest, y_train_inicial, _ = split_train_test(X, y, test_mask)
 
     # Guardar obs_id
-    test_obs_ids = X_test["obs_id"].copy()
+    test_obs_ids = X_finaltest["obs_id"].copy()
     
     X_train = None
     y_train = None
@@ -476,19 +476,19 @@ def main():
     X = X.drop(columns=["obs_id"])  # For CV optimization below
 
     # Build leakage-free OOF proportion features on training; apply full-train maps to test
-    X_train_inicial, X_test = build_oof_proportion_features(
-        X_train_inicial,
-        X_test,
+    X_train_dataset, X_finaltest = build_oof_proportion_features(
+        X_train_dataset,
+        X_finaltest,
         groups_col="username",
     )
 
     # Usar GroupKFold para evitar data leakage por usuario
     # Necesitamos los grupos de usuario para el GroupKFold
-    train_groups = X_train_inicial["username"].values
+    train_groups = X_train_dataset["username"].values
     
     # Optimización de hiperparametros usando GroupKFold en todo el training data
     best = fmin(
-        fn=lambda params: objective_GroupKFold(params, X_train_inicial, pd.Series(y_train_inicial), train_groups),
+        fn=lambda params: objective_GroupKFold(params, X_train_dataset, pd.Series(y_train_inicial), train_groups),
         space=space,
         algo=tpe.suggest,
         max_evals=MAX_EVALS_BAYESIAN,
@@ -505,8 +505,8 @@ def main():
         "is_backbtn", "is_trackdone", "is_endplay", "obs_id",
     ]
 
-    X_train_model_full = X_train_inicial.drop(columns=leak_and_key_cols, errors="ignore")
-    X_test_model = X_test.drop(columns=leak_and_key_cols, errors="ignore")
+    X_train_model_full = X_train_dataset.drop(columns=leak_and_key_cols, errors="ignore")
+    X_finaltest_model = X_finaltest.drop(columns=leak_and_key_cols, errors="ignore")
 
     # Split train vs validation normal (solo para evaluación final)
     # IMPORTANTE: Este split es solo para evaluación final, no para optimización de hiperparámetros
@@ -546,7 +546,7 @@ def main():
     print("\nGenerating predictions for test set...")
     # Retrain on all training data (with OOF features and dropped leakage cols) for test predictions
     final_model = train_classifier_xgboost(X_train_model_full, pd.Series(y_train_inicial), params)
-    preds_proba = final_model.predict_proba(X_test_model)[:, 1]
+    preds_proba = final_model.predict_proba(X_finaltest_model)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
     preds_df.to_csv("modelo_benchmark.csv", index=False, sep=",")
     print(f"  -> Predictions written to 'modelo_benchmark.csv'")
