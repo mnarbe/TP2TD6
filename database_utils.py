@@ -8,11 +8,11 @@ def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     concatenate, and reset index.
     """
     print("Loading competition datasets from:", data_dir)
-    train_file = os.path.join(data_dir, "train_data.txt")
+    train_file = os.path.join(data_dir, "merged_data.csv")
     test_file = os.path.join(data_dir, "test_data.txt")
 
     # Load training data and optionally subsample
-    train_df = pd.read_csv(train_file, sep="\t", low_memory=False)
+    train_df = pd.read_csv(train_file, low_memory=False)
     if sample_frac is not None:
         train_df = train_df.sample(frac=sample_frac, random_state=random_state)
 
@@ -23,6 +23,7 @@ def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     combined = pd.concat([train_df, test_df], ignore_index=True)
     print(f"  → Concatenated DataFrame: {combined.shape[0]} rows")
     return combined
+
 
 def momento_del_dia(hora):
     if 6 <= hora < 10:
@@ -45,7 +46,6 @@ def cast_column_types(df):
     """
     print("Casting column types and parsing datetime fields...")
     dtype_map = {
-        #"platform": "category",
         "conn_country": "category",
         "ip_addr": "category",
         "master_metadata_track_name": "category",
@@ -64,17 +64,41 @@ def cast_column_types(df):
         "shuffle": bool,
         "offline": bool,
         "incognito_mode": bool,
-        "obs_id": int
+        "obs_id": int,
+        # Nuevas columnas de mergecsv - convertir a tipos apropiados
+        "name": "category",
+        "explicit": bool,
+        "release_date": "category",
+        "album_name": "category",
+        "album_release_date": "category",
+        "artist_name": "category",
+        "popularity": "float32",
+        "track_number": "int32",
+        "show_name": "category",
+        "show_publisher": "category",
+        "show_total_episodes": "int32"
     }
 
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
     df["offline_timestamp"] = pd.to_datetime(
         df["offline_timestamp"], unit="s", errors="coerce", utc=True
     )
-    df = df.astype(dtype_map)
+    
+    # Apply dtype mapping only to columns that exist in the dataframe
+    for col, dtype in dtype_map.items():
+        if col in df.columns:
+            try:
+                if dtype == bool and df[col].dtype != bool:
+                    # Para columnas booleanas, manejar valores nulos y convertir
+                    df[col] = df[col].fillna(False).astype(bool)
+                else:
+                    df[col] = df[col].astype(dtype)
+            except Exception as e:
+                print(f"Warning: Could not convert column {col} to {dtype}: {e}")
+                # Si falla la conversión, mantener el tipo original
+    
     print("  → Column types cast successfully.")
     return df
-
 
 def split_train_test(X, y, test_mask):
     """

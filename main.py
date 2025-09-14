@@ -9,8 +9,8 @@ pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
 PORCENTAJE_DATASET_UTILIZADO = 0.005 # Porcentaje del dataset a utilizar (0.0-1.0)
-MAX_EVALS_BAYESIAN = 1 # Cantidad de iteraciones para la optimización bayesiana
-FOLD_SPLITS = 3 # Cantidad de folds (KFold o GroupKFold)
+MAX_EVALS_BAYESIAN = 5 # Cantidad de iteraciones para la optimización bayesiana
+FOLD_SPLITS = 5 # Cantidad de folds (KFold o GroupKFold)
 
 def main():
     start = time.time()
@@ -64,15 +64,32 @@ def main():
         "time_of_day",
         "is_track",
         "is_podcast",
-        "operative_system"
+        "operative_system",
+        # Nuevas columnas de mergecsv
+        "name", "duration_ms", "explicit", "release_date",
+        "album_name", "album_release_date", "artist_name", "popularity",
+        "track_number", "show_name", "show_publisher", "show_total_episodes"
     ]
-    
+
+    # Mantener solo las columnas que existen en el dataframe
+    to_keep = [col for col in to_keep if col in df.columns]
     df = df[to_keep]
+
+    # Asegurar que todas las columnas categóricas sean del tipo 'category'
+    categorical_cols = df.select_dtypes(include=['object']).columns
+    for col in categorical_cols:
+        df[col] = df[col].astype('category')
+    
+    # Asegurar que las columnas booleanas sean del tipo bool
+    bool_cols = ['explicit', 'incognito_mode', 'offline', 'shuffle', 'is_track', 'is_podcast']
+    for col in bool_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna(False).astype(bool)
 
     # Build feature matrix and get feature names
     test_mask = df["is_test"].to_numpy()
     y = df["target"].to_numpy()
-    X = df.drop(columns=["target", "is_test"])
+    X = df.drop(columns=["target", "is_test"])    
 
     # Split data
     X_train_dataset, X_test_to_predict, y_train_inicial, _ = split_train_test(X, y, test_mask)
