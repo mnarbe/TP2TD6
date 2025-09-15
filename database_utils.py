@@ -21,7 +21,7 @@ def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
 
     # Concatenate and reset index
     combined = pd.concat([train_df, test_df], ignore_index=True)
-    print(f"  → Concatenated DataFrame: {combined.shape[0]} rows")
+    print(f"  --> Concatenated DataFrame: {combined.shape[0]} rows")
     return combined
 
 
@@ -76,7 +76,7 @@ def cast_column_types(df):
         df["offline_timestamp"], unit="s", errors="coerce", utc=True
     )
     df = df.astype(dtype_map)
-    print("  → Column types cast successfully.")
+    print("  --> Column types cast successfully.")
     return df
 
 def split_train_test(X, y, test_mask):
@@ -92,8 +92,8 @@ def split_train_test(X, y, test_mask):
     y_train = y[train_mask]
     y_test = y[test_mask]
 
-    print(f"  → Training set: {X_train.shape[0]} rows")
-    print(f"  → Test set:     {X_test.shape[0]} rows")
+    print(f"  --> Training set: {X_train.shape[0]} rows")
+    print(f"  --> Test set:     {X_test.shape[0]} rows")
     return X_train, X_test, y_train, y_test
 
 def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_ids):
@@ -117,4 +117,4 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
     preds_proba = model.predict_proba(X_test_to_predict)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
     preds_df.to_csv("modelo_benchmark.csv", index=False, sep=",")
-    print(f"  → Predictions written to 'modelo_benchmark.csv'")
+    print(f"  --> Predictions written to 'modelo_benchmark.csv'")

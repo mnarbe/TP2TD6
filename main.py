@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
-PORCENTAJE_DATASET_UTILIZADO = 0.005 # Porcentaje del dataset a utilizar
+PORCENTAJE_DATASET_UTILIZADO = 0.3 # Porcentaje del dataset a utilizar
 MAX_EVALS_BAYESIAN = 5 # Cantidad de iteraciones para la optimización bayesiana
 FOLD_SPLITS = 5 # Cantidad de folds (KFold o GroupKFold)
 
