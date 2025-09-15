@@ -66,8 +66,8 @@ def main():
         "is_podcast",
         "operative_system",
         # Nuevas columnas de mergecsv
-        "name", "duration_ms", "explicit", "release_date",
-        "album_name", "album_release_date", "artist_name", "popularity",
+        "duration_ms", "explicit", "release_date",
+        "album_release_date", "popularity",
         "track_number", "show_name", "show_publisher", "show_total_episodes"
     ]
 
