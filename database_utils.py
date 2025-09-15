@@ -72,31 +72,18 @@ def cast_column_types(df):
         "album_name": "category",
         "album_release_date": "category",
         "artist_name": "category",
-        "popularity": "float32",
-        "track_number": "int32",
+        "popularity": "Int32",
         "show_name": "category",
         "show_publisher": "category",
-        "show_total_episodes": "int32"
+        "track_number": "Int32",
+        "show_total_episodes": "Int32"
     }
 
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
     df["offline_timestamp"] = pd.to_datetime(
         df["offline_timestamp"], unit="s", errors="coerce", utc=True
     )
-    
-    # Apply dtype mapping only to columns that exist in the dataframe
-    for col, dtype in dtype_map.items():
-        if col in df.columns:
-            try:
-                if dtype == bool and df[col].dtype != bool:
-                    # Para columnas booleanas, manejar valores nulos y convertir
-                    df[col] = df[col].fillna(False).astype(bool)
-                else:
-                    df[col] = df[col].astype(dtype)
-            except Exception as e:
-                print(f"Warning: Could not convert column {col} to {dtype}: {e}")
-                # Si falla la conversión, mantener el tipo original
-    
+    df = df.astype(dtype_map)
     print("  → Column types cast successfully.")
     return df
 
