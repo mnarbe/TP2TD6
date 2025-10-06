@@ -5,6 +5,7 @@ import time
 from database_utils import load_competition_datasets, cast_column_types, momento_del_dia, split_train_test, processFinalInformation
 from base_xgboost import trainXGBoostModelTemporal
 import constants as C
+from sklearn.model_selection import train_test_split
 
 pd.set_option("display.max_columns", None)
 
@@ -91,14 +92,19 @@ def main():
     X_val = X_train_dataset[temporal_val_mask].copy()
     y_train = y_train_dataset[temporal_train_mask]
     y_val = y_train_dataset[temporal_val_mask]
+
+    # Get 10% from 2024 to make a test set
+    X_val, X_test, y_val, y_test = train_test_split(
+        X_val, y_val, test_size=0.1, random_state=C.RAND_SEED, stratify=y_val
+    )
     
     print(f"  --> Temporal training set (pre-2024): {X_train.shape[0]} rows")
     print(f"  --> Temporal validation set (2024): {X_val.shape[0]} rows")
+    print(f"  --> Temporal test set (2024): {X_test.shape[0]} rows")
     
     # Check if we have enough data in both splits
     if X_val.shape[0] == 0:
         print("WARNING: No 2024 data found for validation. Falling back to random split.")
-        from sklearn.model_selection import train_test_split
         X_train, X_val, y_train, y_val = train_test_split(
             X_train_dataset, y_train_dataset, test_size=0.2, 
             random_state=C.RAND_SEED, stratify=y_train_dataset
@@ -110,7 +116,8 @@ def main():
     # Remove obs_id and year from feature matrices (keep for final predictions)
     X_train_features = X_train.drop(columns=["obs_id", "year"])
     X_val_features = X_val.drop(columns=["obs_id", "year"])
-    X_test_features = X_test_to_predict.drop(columns=["obs_id", "year"])
+    X_test_features = X_test.drop(columns=["obs_id", "year"])
+    X_test_to_predict_features = X_test_to_predict.drop(columns=["obs_id", "year"])
     
     print(f"Target distribution in training: {y_train.mean():.4f}")
     print(f"Target distribution in validation: {y_val.mean():.4f}")
@@ -122,8 +129,8 @@ def main():
         MAX_EVALS_BAYESIAN
     )
 
-    # For final evaluation, use the validation set as "test"
-    processFinalInformation(model, X_val_features, y_val, X_test_features, test_obs_ids)
+    # For final evaluation, use the test set
+    processFinalInformation(model, X_test_features, y_test, X_test_to_predict_features, test_obs_ids)
 
     print("=== Pipeline complete ===")
     end = time.time()

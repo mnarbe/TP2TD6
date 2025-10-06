@@ -8,33 +8,6 @@ import xgboost as xgb
 from sklearn.metrics import roc_auc_score
 from hyperopt import hp, fmin, tpe, space_eval, STATUS_OK
 
-def train_classifier_basic(X_train, y_train, params=None):
-    """
-    Train a Classifier 
-    """
-    print("Training model...")
-    
-    default_params = {
-        "n_estimators": 100,
-        "max_depth": None,
-        "min_samples_split": 2,
-        "min_samples_leaf": 1,
-        "max_features": "sqrt",
-        "n_jobs": -1,
-        "random_state": C.RAND_SEED,
-        "bootstrap": True,
-    }
-    rf_params = default_params.copy()
-    if params:
-        rf_params.update(params)
-
-    model = RandomForestClassifier(**rf_params)
-
-    print("  --> Fitting RandomForestClassifier...")
-    model.fit(X_train, y_train)
-    print("  --> Model training complete.")
-    return model
-
 def train_classifier_xgboost(X_train, y_train, params=None):
     """
     Train a Classifier 
@@ -66,6 +39,10 @@ def train_classifier_xgboost_val(X_train, y_train, X_val, y_val, params=None):
     )
     return model
 
+################################################
+########      Funciones Objetivo      ##########
+################################################
+
 def objective_KFold(params, X_train, y_train, fold_splits):
     """
     CV interna sobre el train inicial (sin agrupar por usuario).
@@ -79,6 +56,36 @@ def objective_KFold(params, X_train, y_train, fold_splits):
         preds = model.predict_proba(X_va)[:, 1]
         aucs.append(roc_auc_score(y_va, preds))
     return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
+
+def objective_temporal(params, X_train, y_train, X_val, y_val):
+    """Objective function for hyperopt using temporal validation."""
+    model = xgb.XGBClassifier(
+        objective='binary:logistic',
+        seed=C.RAND_SEED,
+        eval_metric='auc',
+        enable_categorical=True,
+        **params
+    )
+    
+    # Train on pre-2024 data, validate on 2024 data
+    model.fit(
+        X_train, y_train, 
+        eval_set=[(X_val, y_val)], 
+        verbose=False # Stop if no improvement for 50 rounds
+    )
+    
+    # Get predictions on validation set
+    preds = model.predict_proba(X_val)[:, 1]
+    auc = roc_auc_score(y_val, preds)
+    
+    print(f"  --> Temporal Validation AUC: {auc:.5f}")
+    
+    return {"loss": 1 - auc, "status": STATUS_OK}
+
+
+################################################
+#########      Modelos XGBoost      ############
+################################################
 
 def trainXGBoostModel(X_train, y_train, fold_splits, optimization_evals):
     # Define hyperparameter search space
@@ -208,12 +215,6 @@ def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
     Returns:
         Trained XGBoost model
     """
-    from hyperopt import hp, fmin, tpe, space_eval, STATUS_OK
-    import xgboost as xgb
-    from sklearn.metrics import roc_auc_score
-    import numpy as np
-    import pandas as pd
-    import constants as C
     
     print("=== Training XGBoost with Temporal Validation ===")
     
@@ -231,35 +232,10 @@ def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
         'min_child_weight': hp.uniformint('min_child_weight', 1, 15)
     }
     
-    def objective_temporal(params):
-        """Objective function for hyperopt using temporal validation."""
-        model = xgb.XGBClassifier(
-            objective='binary:logistic',
-            seed=C.RAND_SEED,
-            eval_metric='auc',
-            enable_categorical=True,
-            **params
-        )
-        
-        # Train on pre-2024 data, validate on 2024 data
-        model.fit(
-            X_train, y_train, 
-            eval_set=[(X_val, y_val)], 
-            verbose=False # Stop if no improvement for 50 rounds
-        )
-        
-        # Get predictions on validation set
-        preds = model.predict_proba(X_val)[:, 1]
-        auc = roc_auc_score(y_val, preds)
-        
-        print(f"  --> Temporal Validation AUC: {auc:.5f}")
-        
-        return {"loss": 1 - auc, "status": STATUS_OK}
-    
     # Run hyperparameter optimization
     print(f"Starting hyperparameter optimization with {max_evals} evaluations...")
     best = fmin(
-        fn=objective_temporal,
+        fn=lambda params: objective_temporal(params, X_train, y_train, X_val, y_val),
         space=space,
         algo=tpe.suggest,
         max_evals=max_evals,
@@ -275,36 +251,6 @@ def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
     
     # Train final model with best parameters on all available training data
     print("\nTraining final model with best parameters...")
-    final_model = xgb.XGBClassifier(
-        objective='binary:logistic',
-        seed=C.RAND_SEED,
-        eval_metric='auc',
-        enable_categorical=True,
-        **best_params
-    )
-    
-    # Train only on pre-2024 data (more conservative approach)
-    final_model.fit(X_train, y_train)
-    
-    # Evaluate final model
-    train_preds = final_model.predict_proba(X_train)[:, 1]
-    train_auc = roc_auc_score(y_train, train_preds)
-    
-    val_preds = final_model.predict_proba(X_val)[:, 1]
-    val_auc = roc_auc_score(y_val, val_preds)
-    
-    print(f"\nFinal Model Performance:")
-    print(f"  Training AUC (pre-2024): {train_auc:.5f}")
-    print(f"  Validation AUC (2024): {val_auc:.5f}")
-    
-    # Feature importance
-    if hasattr(final_model, 'feature_importances_'):
-        importances = final_model.feature_importances_
-        feature_names = final_model.get_booster().feature_names
-        imp_series = pd.Series(importances, index=feature_names)
-        imp_sorted = imp_series.sort_values(ascending=False)
-        
-        print("\nTop 10 feature importances:")
-        print(imp_sorted.head(10))
+    final_model = train_classifier_xgboost(X_train, y_train, best_params)
     
     return final_model

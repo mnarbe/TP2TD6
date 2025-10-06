@@ -1,0 +1,6 @@
+Por usuario, cuando saltaste a una canción diferente es más probable el skip.
+Cantidad de canciones escuchadas por usuario previas a la actual.
+Dia de la semana
+    Es fin de semana
+    Es viernes
+Usar un punto de corte temporal en vez de 2024 y pre 2024, porque sino queda menos de 10% para validation.
