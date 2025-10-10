@@ -37,6 +37,16 @@ def load_spotify_api_data(sp_api_dir="../spotify_api_data"):
             "artist_name": data["artists"][0]["name"] if "artists" in data and data["artists"] else None,
             "popularity": data.get("popularity"),
             "track_number": data.get("track_number"),
+            "is_short_track": (
+                data.get("duration_ms") is not None and
+                data.get("duration_ms") <= 90000 and
+                pd.notnull(row['spotify_track_uri'])
+            ),
+            "is_long_track": (
+                data.get("duration_ms") is not None and
+                data.get("duration_ms") > 360000 and
+                pd.notnull(row['spotify_track_uri'])
+            ),
             # Episode-specific
             "show_name": data.get("show", {}).get("name") if "show" in data else None,
             "show_publisher": data.get("show", {}).get("publisher") if "show" in data else None,
@@ -65,7 +75,7 @@ def merge_train_with_api(train_path="train_data.txt", sp_api_dir="../spotify_api
     cols_to_keep = [
         "uri", "name", "duration_ms", "explicit", "release_date",
         "album_name", "album_release_date", "artist_name", "popularity",
-        "track_number", "show_name", "show_publisher", "show_total_episodes"
+        "track_number", "is_short_track", "is_long_track", "show_name", "show_publisher", "show_total_episodes"
     ]
 
     # Merge track metadata
@@ -80,7 +90,7 @@ def merge_train_with_api(train_path="train_data.txt", sp_api_dir="../spotify_api
 
     # Combine track vs episode columns
     for col in ["name", "duration_ms", "explicit", "release_date", "album_name",
-                "album_release_date", "artist_name", "popularity", "track_number",
+                "album_release_date", "artist_name", "popularity", "track_number", "is_short_track", "is_long_track",
                 "show_name", "show_publisher", "show_total_episodes"]:
         col_episode = col + "_episode"
         if col_episode in merged.columns:
@@ -115,7 +125,7 @@ def merge_test_with_api(train_path="test_data.txt", sp_api_dir="../spotify_api_d
     cols_to_keep = [
         "uri", "name", "duration_ms", "explicit", "release_date",
         "album_name", "album_release_date", "artist_name", "popularity",
-        "track_number", "show_name", "show_publisher", "show_total_episodes"
+        "track_number", "is_short_track", "is_long_track", "show_name", "show_publisher", "show_total_episodes"
     ]
 
     # Merge track metadata
@@ -130,7 +140,7 @@ def merge_test_with_api(train_path="test_data.txt", sp_api_dir="../spotify_api_d
 
     # Combine track vs episode columns
     for col in ["name", "duration_ms", "explicit", "release_date", "album_name",
-                "album_release_date", "artist_name", "popularity", "track_number",
+                "album_release_date", "artist_name", "popularity", "track_number", "is_short_track", "is_long_track",
                 "show_name", "show_publisher", "show_total_episodes"]:
         col_episode = col + "_episode"
         if col_episode in merged.columns:

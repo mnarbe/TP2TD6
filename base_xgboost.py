@@ -161,7 +161,7 @@ def trainXGBoostModel_v2(X_train, y_train, fold_splits, optimization_evals):
         all_params = [all_params[i] for i in idx]
 
     total = len(all_params)
-    print(f"🔍 GridSearch con límite: {total}/{total_full} combinaciones a evaluar...\n")
+    print(f"GridSearch con límite: {total}/{total_full} combinaciones a evaluar...\n")
 
     search = GridSearchCV(
         estimator=base_estimator,
@@ -183,16 +183,16 @@ def trainXGBoostModel_v2(X_train, y_train, fold_splits, optimization_evals):
                 cvr = search.cv_results_
                 mean_auc = float(cvr["mean_test_score"][-1])
                 std_auc = float(cvr["std_test_score"][-1])
-                print(f"   → AUC CV: {mean_auc:.5f} ± {std_auc:.5f}\n")
+                print(f"   --> AUC CV: {mean_auc:.5f} ± {std_auc:.5f}\n")
             except Exception:
-                print("   → AUC CV: (no disponible aún)\n")
+                print("   --> AUC CV: (no disponible aún)\n")
 
     search._run_search = run_search_with_progress  # type: ignore
 
     search.fit(X_train, y_train)
 
     best_params = search.best_params_
-    print("\n✅ Mejores hiperparámetros (GridSearchCV):")
+    print("\nMejores hiperparámetros (GridSearchCV):")
     print(best_params)
 
     return train_classifier_xgboost(X_train, y_train, best_params)

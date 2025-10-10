@@ -68,7 +68,7 @@ def main():
         # Nuevas columnas de mergecsv
         "duration_ms", "explicit", "release_date",
         "album_release_date", "popularity",
-        "track_number", "show_name", "show_publisher", "show_total_episodes"
+        "track_number", "show_name", "show_publisher", "show_total_episodes", "is_short_track", "is_long_track"
     ]
 
     # Mantener solo las columnas que existen en el dataframe
