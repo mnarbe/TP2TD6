@@ -68,6 +68,8 @@ def cast_column_types(df):
         "show_name": "category",
         "show_publisher": "category",
         "track_number": "Int32",
+        "is_short_track": "bool",
+        "is_long_track": "bool",
         "show_total_episodes": "Int32"
     }
 
