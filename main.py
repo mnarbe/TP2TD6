@@ -1,6 +1,6 @@
 import pandas as pd
 import time
-from database_utils import load_competition_datasets, cast_column_types, momento_del_dia, split_train_test, processFinalInformation
+from database_utils import load_competition_datasets, cast_column_types, momento_del_dia, split_train_test, processFinalInformation, es_finde
 from base_xgboost import trainXGBoostModel
 import constants as C
 from sklearn.model_selection import train_test_split
@@ -35,8 +35,10 @@ def main():
     #Hago que solo lea la primera palabra de platform (así no separa cada windows, por ejemplo)
     df["operative_system"] = df["platform"].str.strip().str.split(n=1).str[0].astype("category")
     
+    df["fin_de_semana"] = df["ts"].apply(es_finde)
     # df["user_order"] = df.groupby("username", observed=True).cumcount() + 1
     df = df.sort_values(["obs_id"])
+    
 
     # Create target and test mask
     print("Creating 'target' and 'is_test' columns...")
@@ -59,6 +61,7 @@ def main():
         "master_metadata_album_artist_name",
         "master_metadata_track_name", #droppear porque ya tenemos la flag?
         "episode_name", #droppear porque ya tenemos la flag?
+        "fin_de_semana",
         #"ts",
         "month_played",
         "time_of_day",

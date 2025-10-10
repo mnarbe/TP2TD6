@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from sklearn.metrics import roc_auc_score
+import datetime
 
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     """
@@ -39,6 +40,8 @@ def momento_del_dia(hora):
     else:
         return "early_morning"
 
+def es_finde(dia):
+    return dia.weekday() >= 5
 
 def cast_column_types(df):
     """
@@ -60,6 +63,7 @@ def cast_column_types(df):
         "offline": bool,
         "incognito_mode": bool,
         "obs_id": int,
+        "fin_de_semana": bool,
         # Nuevas columnas de mergecsv - convertir a tipos apropiados
         "explicit": bool,
         "release_date": "category",
