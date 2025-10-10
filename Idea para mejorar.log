@@ -1,6 +1,16 @@
 Por usuario, cuando saltaste a una canción diferente es más probable el skip.
+
 Cantidad de canciones escuchadas por usuario previas a la actual.
+
 Dia de la semana
     Es fin de semana
     Es viernes
+
+BUSCAR GENERO DE LAS CANCIONES Y DE QUÉ TIPO ES EL EPISODIO
+    En vez de usar nombres y todo eso lo resumimos a eso. Puede ser con PCA, clusters, buscar datos reales, etc.
+
 Usar un punto de corte temporal en vez de 2024 y pre 2024, porque sino queda menos de 10% para validation.
+
+Los datos de test a predecir son a partir de 2024-09-01, los de train hasta 2024-08-31
+    No sé si es mejor usar 2024 para validation, xq igual no tenemos datos con fechas que coincidan con el conj de test
+    X ahi es mejor hacer validaciones cross por tiempo
