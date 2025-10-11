@@ -11,7 +11,7 @@ def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     """
     print("Loading competition datasets from:", data_dir)
     train_file = os.path.join(data_dir, "merged_data.csv")
-    test_file = os.path.join(data_dir, "test_data.txt")
+    test_file = os.path.join(data_dir, "merged_test_data.csv")
 
     # Load training data and optionally subsample
     train_df = pd.read_csv(train_file, low_memory=False)
@@ -19,7 +19,7 @@ def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
         train_df = train_df.sample(frac=sample_frac, random_state=random_state)
 
     # Load test data
-    test_df = pd.read_csv(test_file, sep="\t", low_memory=False)
+    test_df = pd.read_csv(test_file, low_memory=False)
 
     # Concatenate and reset index
     combined = pd.concat([train_df, test_df], ignore_index=True)
