@@ -26,8 +26,67 @@ def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     print(f"  --> Concatenated DataFrame: {combined.shape[0]} rows")
     return combined
 
-# Split train test
-def split_train_test(df):
+
+def momento_del_dia(hora):
+    if 6 <= hora < 10:
+        return "morning"
+    elif 10 <= hora < 14:
+        return "noon"
+    elif 14 <= hora < 18:
+        return "afternoon"
+    elif 18 <= hora < 22:
+        return "evening"
+    elif 22 <= hora < 24:
+        return "late_night"
+    else:
+        return "early_morning"
+
+def es_finde(dia):
+    return dia.weekday() >= 5
+
+def cast_column_types(df):
+    """
+    Cast columns to efficient dtypes and parse datetime fields.
+    """
+    print("Casting column types and parsing datetime fields...")
+    dtype_map = {
+        "conn_country": "category",
+        "ip_addr": "category",
+        "master_metadata_track_name": "category",
+        "master_metadata_album_artist_name": "category",
+        "master_metadata_album_album_name": "category",
+        "reason_end": "category",
+        "username": "category",
+        "episode_name": "category",
+        "episode_show_name": "category",
+        "spotify_episode_uri": "string",
+        "shuffle": bool,
+        "offline": bool,
+        "incognito_mode": bool,
+        "obs_id": int,
+        "fin_de_semana": bool,
+        # Nuevas columnas de mergecsv - convertir a tipos apropiados
+        "explicit": bool,
+        "release_date": "category",
+        "album_release_date": "category",
+        "popularity": "Int32",
+        "show_name": "category",
+        "show_publisher": "category",
+        "track_number": "Int32",
+        "is_short_track": "bool",
+        "is_long_track": "bool",
+        "show_total_episodes": "Int32"
+    }
+
+    df["ts"] = pd.to_datetime(df["ts"], utc=True)
+    df["offline_timestamp"] = pd.to_datetime(
+        df["offline_timestamp"], unit="s", errors="coerce", utc=True
+    )
+    df = df.astype(dtype_map)
+    print("  --> Column types cast successfully.")
+    return df
+
+def split_train_test(X, y, test_mask):
     """
     Split features and labels into train/test based on mask.
     """

@@ -24,10 +24,69 @@ def main():
     
     # Preprocess dataset
     df = cast_column_types(df)
+<<<<<<< HEAD
+    
+    # Add time-based features
+    df["month_played"] = df["ts"].dt.month.astype("uint8")
+    df["time_of_day"] = df["ts"].dt.hour.apply(momento_del_dia).astype("category")
+    df["is_track"] = df["master_metadata_track_name"].notna().astype("uint8")
+    df["is_podcast"] = df["episode_name"].notna().astype("uint8")
+    df["operative_system"] = df["platform"].str.strip().str.split(n=1).str[0].astype("category")
+    df["fin_de_semana"] = df["ts"].dt.weekday.isin([5, 6]).astype("uint8")
+    
+    
+    
+    # Add year feature for temporal split
+    df["year"] = df["ts"].dt.year
+    
+    df = df.sort_values(["obs_id"])
+
+    # Create target and test mask
+    print("Creating 'target' and 'is_test' columns...")
+    df["target"] = (df["reason_end"] == "fwdbtn").astype(int)
+    df["is_test"] = df["reason_end"].isna()
+    df.drop(columns=["reason_end"], inplace=True)
+    print("  --> 'target' and 'is_test' created, dropped 'reason_end' column.")
+
+    # Keep only relevant columns (including year for temporal split)
+    to_keep = [
+        "obs_id",
+        "target",
+        "is_test",
+        "year",  # Added for temporal split
+        "incognito_mode",
+        "offline",
+        "shuffle",
+        "username",
+        "conn_country",
+        "ip_addr",
+        "master_metadata_album_artist_name",
+        "master_metadata_track_name",
+        "episode_name",
+        "month_played",
+        "time_of_day",
+        "is_track",
+        "is_podcast",
+        "operative_system",
+        "duration_ms", "explicit", "release_date",
+        "album_release_date", "popularity",
+        "track_number", "show_name", "show_publisher", "show_total_episodes",
+        "is_short_track", "is_long_track", "fin_de_semana"
+    ]
+
+    # Keep only existing columns
+    df = df[[col for col in to_keep if col in df.columns]]
+
+    # First, separate the actual test set (unknown labels)
+    test_mask = df["is_test"].to_numpy()
+    y = df["target"].to_numpy()
+    X = df.drop(columns=["target", "is_test"])
+=======
     df = createNewFeatures(df)
     df = df.sort_values(["obs_id"])
     df = processTargetAndTestMask(df)
     df = keepImportantColumnsDefault(df)
+>>>>>>> cd21947f15d45a1d4de945fbc8f6377e2df5a3cb
     
     # Split off the actual test set for final predictions
     X_train_dataset, X_test_to_predict, y_train_dataset, _ = split_train_test(df)
