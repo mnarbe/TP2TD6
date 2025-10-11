@@ -63,7 +63,6 @@ def cast_column_types(df):
         "offline": bool,
         "incognito_mode": bool,
         "obs_id": int,
-        "fin_de_semana": bool,
         # Nuevas columnas de mergecsv - convertir a tipos apropiados
         "explicit": bool,
         "release_date": "category",
@@ -72,9 +71,9 @@ def cast_column_types(df):
         "show_name": "category",
         "show_publisher": "category",
         "track_number": "Int32",
-        "is_short_track": "bool",
-        "is_long_track": "bool",
-        "show_total_episodes": "Int32"
+        "show_total_episodes": "Int32",
+        "is_short_track": bool,
+        "is_long_track": bool
     }
 
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
