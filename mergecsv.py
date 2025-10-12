@@ -2,7 +2,7 @@ import os
 import json
 import pandas as pd
 
-def load_spotify_api_data(sp_api_dir="../spotify_api_data"):
+def load_spotify_api_data(sp_api_dir="C:/Users/Agustin Mendez/Downloads/spotify_api_data"):
     """
     Load and flatten all Spotify API JSON files into a clean DataFrame.
     Handles both tracks and episodes with a unified schema.
@@ -37,6 +37,9 @@ def load_spotify_api_data(sp_api_dir="../spotify_api_data"):
             "artist_name": data["artists"][0]["name"] if "artists" in data and data["artists"] else None,
             "popularity": data.get("popularity"),
             "track_number": data.get("track_number"),
+            "genre1": data.get("genre1"),
+            "genre2": data.get("genre2"),
+            "genre3": data.get("genre3"),
             # Episode-specific
             "show_name": data.get("show", {}).get("name") if "show" in data else None,
             "show_publisher": data.get("show", {}).get("publisher") if "show" in data else None,
@@ -48,7 +51,7 @@ def load_spotify_api_data(sp_api_dir="../spotify_api_data"):
     df_api = pd.DataFrame(rows)
     return df_api
 
-def merge_train_with_api(train_path="train_data.txt", sp_api_dir="../spotify_api_data", output_path="merged_data.csv"):
+def merge_train_with_api(train_path="train_data.txt", sp_api_dir="C:/Users/Agustin Mendez/Downloads/spotify_api_data", output_path="merged_data_2.csv"):
     """
     Merge train_data.txt with flattened Spotify API metadata.
     Tracks merge on 'spotify_track_uri', episodes on 'spotify_episode_uri'.
@@ -65,7 +68,8 @@ def merge_train_with_api(train_path="train_data.txt", sp_api_dir="../spotify_api
     cols_to_keep = [
         "uri", "name", "duration_ms", "explicit", "release_date",
         "album_name", "album_release_date", "artist_name", "popularity",
-        "track_number", "show_name", "show_publisher", "show_total_episodes"
+        "track_number", "show_name", "show_publisher", "show_total_episodes",
+        "genre1", "genre2", "genre3"
     ]
 
     # Merge track metadata
@@ -81,6 +85,7 @@ def merge_train_with_api(train_path="train_data.txt", sp_api_dir="../spotify_api
     # Combine track vs episode columns
     for col in ["name", "duration_ms", "explicit", "release_date", "album_name",
                 "album_release_date", "artist_name", "popularity", "track_number",
+                "genre1", "genre2", "genre3",
                 "show_name", "show_publisher", "show_total_episodes"]:
         col_episode = col + "_episode"
         if col_episode in merged.columns:
@@ -98,7 +103,7 @@ def merge_train_with_api(train_path="train_data.txt", sp_api_dir="../spotify_api
 
     return merged
 
-def merge_test_with_api(train_path="test_data.txt", sp_api_dir="../spotify_api_data", output_path="merged_test_data.csv"):
+def merge_test_with_api(train_path="test_data.txt", sp_api_dir="C:/Users/Agustin Mendez/Downloads/spotify_api_data", output_path="merged_test_data_2.csv"):
     """
     Merge test_data.txt with flattened Spotify API metadata.
     Tracks merge on 'spotify_track_uri', episodes on 'spotify_episode_uri'.
@@ -115,7 +120,8 @@ def merge_test_with_api(train_path="test_data.txt", sp_api_dir="../spotify_api_d
     cols_to_keep = [
         "uri", "name", "duration_ms", "explicit", "release_date",
         "album_name", "album_release_date", "artist_name", "popularity",
-        "track_number", "show_name", "show_publisher", "show_total_episodes"
+        "track_number", "show_name", "show_publisher", "show_total_episodes",
+        "genre1", "genre2", "genre3"
     ]
 
     # Merge track metadata
@@ -131,6 +137,7 @@ def merge_test_with_api(train_path="test_data.txt", sp_api_dir="../spotify_api_d
     # Combine track vs episode columns
     for col in ["name", "duration_ms", "explicit", "release_date", "album_name",
                 "album_release_date", "artist_name", "popularity", "track_number",
+                "genre1", "genre2", "genre3",
                 "show_name", "show_publisher", "show_total_episodes"]:
         col_episode = col + "_episode"
         if col_episode in merged.columns:
@@ -150,3 +157,6 @@ def merge_test_with_api(train_path="test_data.txt", sp_api_dir="../spotify_api_d
 
 if __name__ == "__main__":
     merge_train_with_api()
+    print("-----------------MERGED TRAIN DATA--------------------")
+    merge_test_with_api()
+    print("-----------------MERGED TEST DATA--------------------")
