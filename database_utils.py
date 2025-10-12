@@ -103,7 +103,23 @@ def cast_column_types(df):
         "show_name": "category",
         "show_publisher": "category",
         "track_number": "Int32",
-        "show_total_episodes": "Int32"
+        "show_total_episodes": "Int32",
+        # Nuevas columnas de genero
+        "genre1": "category", "genre2": "category", "genre3": "category",
+        "has_popular_artist_genre": bool, "has_rare_artist_genre": bool,
+        "is_kids_genre": bool,
+        "is_comedy_genre": bool,
+        "is_spanish": bool,
+        "has_japanese_genres": bool,
+        "has_local_genre": bool,
+        "has_latin_genre": bool,
+        "has_low_energy_genre": bool,
+        "has_high_energy_genre": bool,
+        "has_heavy_genre": bool,
+        "has_party_genre": bool,
+        "has_romantic_genre": bool,
+        "has_relaxing_genre": bool,
+        "has_instrumental_genre": bool
     }
 
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
@@ -111,6 +127,52 @@ def cast_column_types(df):
     df = df.astype(dtype_map)
     print("  --> Column types cast successfully.")
     return df
+
+def processTargetAndTestMask(df):
+    # Create target and test mask
+    print("Creating 'target' and 'is_test' columns...")
+    df["target"] = (df["reason_end"] == "fwdbtn").astype(int)
+    df["is_test"] = df["reason_end"].isna()
+    df.drop(columns=["reason_end"], inplace=True)
+    print("  --> 'target' and 'is_test' created, dropped 'reason_end' column.")
+
+    return df
+
+def keepImportantColumnsDefault(df):
+    # Keep only relevant columns (including year for temporal split)
+    to_keep = [
+        "obs_id", "username", "ip_addr",
+        "target", "is_test",
+        "incognito_mode", "offline", "shuffle", # Booleanas
+        "conn_country", "operative_system", # De contexto
+        "is_track", "master_metadata_album_artist_name", "master_metadata_track_name", "track_number", # De canciones
+        "is_podcast", "episode_name", "show_name", "show_publisher", "show_total_episodes", # De podcasts
+        "is_short_track", "is_long_track", "duration_ms", "explicit", "popularity", # Características de la pista
+        "time_since_release", "release_date_year", "release_date_month" # release date,
+        "genre1", "genre2", "genre3", # genero
+        "has_popular_artist_genre", "has_rare_artist_genre", "is_kids_genre", "is_comedy_genre", "is_spanish", # genero
+        "has_japanese_genres", "has_local_genre", "has_latin_genre", "has_low_energy_genre", "has_high_energy_genre", # genero
+        "has_heavy_genre", "has_party_genre", "has_romantic_genre", "has_relaxing_genre", "has_instrumental_genre", # genero
+    ]
+
+    # Adding time-based features 
+    time_based_fields = ["ts", "offline_timestamp"]
+    for field in time_based_fields:
+        to_keep.extend([
+            "month_played_" + field,
+            "time_of_day_" + field,
+            "year_" + field,
+            "weekday_" + field,
+            "fin_de_semana_" + field,
+            "day_of_year_" + field,
+            "week_of_year_" + field,
+            "day_of_month_" + field
+        ])
+
+    # Keep only existing columns
+    return df[[col for col in to_keep if col in df.columns]]
+
+# FEATURE ENGINEERING
 
 def createNewFeatures(df):
     # Add time-based features on timestamp
@@ -145,6 +207,12 @@ def createNewFeatures(df):
 
     return df
 
+def createNewSetFeatures(df):
+    '''
+        Nuevas features pero con riesgo de leakage. IMPORTANTE: Ejecutarlas para cada set por separado.
+    '''
+
+
 def createNewTimeBasedFeatures(df, field):
     df["month_played_" + field] = df[field].dt.month.astype("uint8")
     df["time_of_day_" + field] = df[field].dt.hour.apply(momento_del_dia).astype("category")
@@ -165,45 +233,6 @@ def createNewTimeBasedFeaturesSimple(df, field):
 
     return df
 
-def processTargetAndTestMask(df):
-    # Create target and test mask
-    print("Creating 'target' and 'is_test' columns...")
-    df["target"] = (df["reason_end"] == "fwdbtn").astype(int)
-    df["is_test"] = df["reason_end"].isna()
-    df.drop(columns=["reason_end"], inplace=True)
-    print("  --> 'target' and 'is_test' created, dropped 'reason_end' column.")
-
-    return df
-
-def keepImportantColumnsDefault(df):
-    # Keep only relevant columns (including year for temporal split)
-    to_keep = [
-        "obs_id", "username", "ip_addr",
-        "target", "is_test",
-        "incognito_mode", "offline", "shuffle", # Booleanas
-        "conn_country", "operative_system", # De contexto
-        "is_track", "master_metadata_album_artist_name", "master_metadata_track_name", "track_number", # De canciones
-        "is_podcast", "episode_name", "show_name", "show_publisher", "show_total_episodes", # De podcasts
-        "is_short_track", "is_long_track", "duration_ms", "explicit", "popularity", # Características de la pista
-        "time_since_release", "release_date_year", "release_date_month" # release date
-    ]
-
-    # Adding time-based features 
-    time_based_fields = ["ts", "offline_timestamp"]
-    for field in time_based_fields:
-        to_keep.extend([
-            "month_played_" + field,
-            "time_of_day_" + field,
-            "year_" + field,
-            "weekday_" + field,
-            "fin_de_semana_" + field,
-            "day_of_year_" + field,
-            "week_of_year_" + field,
-            "day_of_month_" + field
-        ])
-
-    # Keep only existing columns
-    return df[[col for col in to_keep if col in df.columns]]
 
 #######################
 # MÉTODOS AUXILIARES
