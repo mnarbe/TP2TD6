@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 import datetime
+import numpy as np
 
 # Carga del dataset
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
@@ -35,8 +36,7 @@ def split_train_test(df):
 
     # First, separate the actual test set (unknown labels)
     test_mask = df["is_test"].to_numpy()
-    y = df["target"].to_numpy()
-    X = df.drop(columns=["target", "is_test"])
+    X, y = split_x_and_y(df)
 
     train_mask = ~test_mask  # Invertir la máscara
 
@@ -48,6 +48,29 @@ def split_train_test(df):
     print(f"  --> Training set: {X_train.shape[0]} rows")
     print(f"  --> Test set:     {X_test.shape[0]} rows")
     return X_train, X_test, y_train, y_test
+
+def split_train_test_df(df):
+    """
+    Split features and labels into train/test based on mask.
+    """
+    print("Splitting data into train/test sets...")
+
+    # First, separate the actual test set (unknown labels)
+    test_mask = df["is_test"].to_numpy()
+    train_mask = ~test_mask  # Invertir la máscara
+
+    df_train = df[train_mask]
+    df_test = df[test_mask]
+
+    print(f"  --> Training set: {df_train.shape[0]} rows")
+    print(f"  --> Test set:     {df_test.shape[0]} rows")
+    return df_train, df_test
+
+# Split x and y
+def split_x_and_y(df):
+    y = df["target"].to_numpy()
+    X = df.drop(columns=["target", "is_test"])
+    return X, y
 
 # Procesado luego de entrenar el modelo y obtener los mejores hiperparámetros
 def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_ids):
@@ -153,6 +176,7 @@ def keepImportantColumnsDefault(df):
         "has_popular_artist_genre", "has_rare_artist_genre", "is_kids_genre", "is_comedy_genre", "is_spanish", # genero
         "has_japanese_genres", "has_local_genre", "has_latin_genre", "has_low_energy_genre", "has_high_energy_genre", # genero
         "has_heavy_genre", "has_party_genre", "has_romantic_genre", "has_relaxing_genre", "has_instrumental_genre", # genero
+        "ts", "spotify_track_uri" # Conservar auxiliares para procesamiento futuro
     ]
 
     # Adding time-based features 
@@ -160,6 +184,7 @@ def keepImportantColumnsDefault(df):
     for field in time_based_fields:
         to_keep.extend([
             "month_played_" + field,
+            "hour_of_day_" + field,
             "time_of_day_" + field,
             "year_" + field,
             "weekday_" + field,
@@ -207,14 +232,122 @@ def createNewFeatures(df):
 
     return df
 
-def createNewSetFeatures(df):
-    '''
-        Nuevas features pero con riesgo de leakage. IMPORTANTE: Ejecutarlas para cada set por separado.
-    '''
+def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calcula features históricas (acumuladas hasta antes de la observación actual)
+    para el dataframe de TRAIN. Asume:
+      - df ya está ordenado por ['username', 'ts'] (ascendente).
+      - df contiene la columna 'target' (0/1 skip).
+      - ts es datetime (si no, intenta convertirlo).
+    Añade columnas:
+      - user_skip_rate
+      - user_operative_system_skip_rate
+      - track_skip_rate
+      - artist_skip_rate
+      - user_explicit_skip_rate
+      - user_hour_skip_rate
+    y no deja columnas intermedias de conteo/cumsum.
+    """
+    df = df.copy()
 
+    # Asegurar ts datetime
+    if not pd.api.types.is_datetime64_any_dtype(df['ts']):
+        df['ts'] = pd.to_datetime(df['ts'])
+    else:
+        # si tiene tz, convertir a naive
+        if df['ts'].dt.tz is not None:
+            df['ts'] = df['ts'].dt.tz_convert(None)
+
+    # base global mean para imputar donde no hay pasado
+    global_mean = df['target'].mean()
+
+    # ---------------------------
+    # Helper para calcular rates
+    # ---------------------------
+    def historical_rate(df, group_cols, target_col='target', out_name='rate'):
+        """
+        Calcula (cum_skips_before / cum_count_before) por grupo definido en group_cols,
+        vectorizado sin usar .shift() para evitar reindexados lentos.
+        Retorna un Series con el rate.
+        """
+        # suma acumulada INCLUYENDO la fila actual
+        cum_skips_incl = df.groupby(group_cols, observed=True)[target_col].cumsum()
+        # cuenta acumulada INCLUYENDO la fila actual (1,2,3,...)
+        cum_count_incl = df.groupby(group_cols, observed=True).cumcount() + 1
+
+        # pasar a "hasta antes de la fila actual"
+        cum_skips_before = cum_skips_incl - df[target_col]
+        cum_count_before = cum_count_incl - 1
+
+        # evitar división por 0: donde count_before == 0 -> NaN
+        rate = cum_skips_before / cum_count_before
+        rate = rate.where(cum_count_before > 0, np.nan)
+
+        # rellenar NaN con global_mean (puedes cambiar la estrategia)
+        rate = rate.fillna(global_mean)
+
+        rate.name = out_name
+        return rate
+
+    # 1) user skip rate histórico
+    df['user_skip_rate'] = historical_rate(df, ['username'], out_name='user_skip_rate')
+    df['user_skip_rate'] = df['user_skip_rate'].astype(float)  # fuerza tipo numérico
+
+    # 2) user + operative_system skip rate histórico
+    df['user_operative_system_skip_rate'] = historical_rate(
+        df, ['username', 'operative_system'], out_name='user_operative_system_skip_rate'
+    )
+    df['user_operative_system_skip_rate'] = df['user_operative_system_skip_rate'].astype(float)  # fuerza tipo numérico
+
+    # 3) track skip rate histórico
+    df['track_skip_rate'] = historical_rate(
+        df, ['spotify_track_uri'], out_name='track_skip_rate'
+    )
+    df['track_skip_rate'] = df['track_skip_rate'].astype(float)  # fuerza tipo numérico
+
+    # 4) artist skip rate histórico
+    df['artist_skip_rate'] = historical_rate(
+        df, ['master_metadata_album_artist_name'], out_name='artist_skip_rate'
+    )
+    df['artist_skip_rate'] = df['artist_skip_rate'].astype(float)  # fuerza tipo numérico
+
+    # 5) user explicit skip rate histórico (user x explicit flag)
+    # explicit puede ser bool o 0/1/NaN; dejamos tal cual
+    df['user_explicit_skip_rate'] = historical_rate(
+        df, ['username', 'explicit'], out_name='user_explicit_skip_rate'
+    )
+    df['user_explicit_skip_rate'] = df['user_explicit_skip_rate'].astype(float)  # fuerza tipo numérico
+
+    # 6) user hour-of-day skip rate histórico (opcional útil)
+    df['user_hour_skip_rate'] = historical_rate(
+        df, ['username', 'hour_of_day_ts'], out_name='user_hour_skip_rate'
+    )
+    df['user_hour_skip_rate'] = df['user_hour_skip_rate'].astype(float)  # fuerza tipo numérico
+
+    return df
+
+def applyHistoricalFeaturesToSet(df_target, df_train):
+    user_last = (
+        df_train.sort_values(['username', 'ts'])
+        .groupby('username')
+        .tail(1)
+        .set_index('username')
+        [[
+            'user_skip_rate',
+            'user_operative_system_skip_rate',
+            'track_skip_rate',
+            'artist_skip_rate',
+            'user_explicit_skip_rate',
+            'user_hour_skip_rate'
+        ]]
+    )
+
+    df_target = df_target.merge(user_last, on='username', how='left')
+    return df_target
 
 def createNewTimeBasedFeatures(df, field):
     df["month_played_" + field] = df[field].dt.month.astype("uint8")
+    df["hour_of_day_" + field] = df[field].dt.month.astype("uint8")
     df["time_of_day_" + field] = df[field].dt.hour.apply(momento_del_dia).astype("category")
     df["year_" + field] = df[field].dt.year.astype("uint16")
     df["weekday_" + field] = df[field].dt.weekday.astype("uint8")
@@ -226,6 +359,7 @@ def createNewTimeBasedFeatures(df, field):
 
 def createNewTimeBasedFeaturesSimple(df, field):
     df["month_played_" + field] = df[field].dt.month.astype("uint8")
+    df["hour_of_day_" + field] = df[field].dt.month.astype("uint8")
     df["time_of_day_" + field] = df[field].dt.hour.apply(momento_del_dia).astype("category")
     df["year_" + field] = df[field].dt.year.astype("uint16")
     df["day_of_year_" + field] = df[field].dt.dayofyear.astype("uint16")
