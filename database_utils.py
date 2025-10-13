@@ -122,11 +122,11 @@ def cast_column_types(df):
         "obs_id": int,
         # Nuevas columnas de mergecsv - convertir a tipos apropiados
         "explicit": bool,
-        "popularity": "Int32",
+        "popularity": "Int16",
         "show_name": "category",
         "show_publisher": "category",
-        "track_number": "Int32",
-        "show_total_episodes": "Int32",
+        "track_number": "Int16",
+        "show_total_episodes": "Int16",
         # Nuevas columnas de genero
         "genre1": "category", "genre2": "category", "genre3": "category",
         "has_popular_artist_genre": bool, "has_rare_artist_genre": bool,
@@ -171,7 +171,7 @@ def keepImportantColumnsDefault(df):
         "is_track", "master_metadata_album_artist_name", "master_metadata_track_name", "track_number", # De canciones
         "is_podcast", "episode_name", "show_name", "show_publisher", "show_total_episodes", # De podcasts
         "is_short_track", "is_long_track", "duration_ms", "explicit", "popularity", # Características de la pista
-        "time_since_release", "release_date_year", "release_date_month" # release date,
+        "time_since_release", "release_date_year", "release_date_month", "song_age_years", # release date,
         "genre1", "genre2", "genre3", # genero
         "has_popular_artist_genre", "has_rare_artist_genre", "is_kids_genre", "is_comedy_genre", "is_spanish", # genero
         "has_japanese_genres", "has_local_genre", "has_latin_genre", "has_low_energy_genre", "has_high_energy_genre", # genero
@@ -208,8 +208,12 @@ def createNewFeatures(df):
     df["release_date"] = df["release_date"].combine_first(df["album_release_date"])
     df["release_date"] = pd.to_datetime(df["release_date"], errors="coerce", utc=True)
     df["time_since_release"] = (df["ts"] - df["release_date"]).dt.total_seconds()
+    df["time_since_release"] = df["time_since_release"].astype("float32")
     df["release_date_year"] = df["release_date"].dt.year.astype("UInt16")
-    df["release_date_month"] = df["release_date"].dt.month.astype("UInt16")
+    df["release_date_month"] = df["release_date"].dt.month.astype("UInt8")
+    current_year = df['ts'].dt.year
+    df['song_age_years'] = current_year - df['release_date_year']
+    df["song_age_years"] = df["song_age_years"].astype("UInt8")
 
     # Add type indicators
     df["is_track"] = df["master_metadata_track_name"].notna().astype("uint8")
@@ -246,7 +250,6 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
       - artist_skip_rate
       - user_explicit_skip_rate
       - user_hour_skip_rate
-    y no deja columnas intermedias de conteo/cumsum.
     """
     df = df.copy()
 
@@ -288,45 +291,82 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
 
         rate.name = out_name
         return rate
+    
+    def processRate(df, col, variables):
+        df[col] = historical_rate(df, variables, out_name=col)
+        df[col] = df[col].astype(np.float32)  # fuerza tipo numérico
 
-    # 1) user skip rate histórico
-    df['user_skip_rate'] = historical_rate(df, ['username'], out_name='user_skip_rate')
-    df['user_skip_rate'] = df['user_skip_rate'].astype(float)  # fuerza tipo numérico
+        return df
 
-    # 2) user + operative_system skip rate histórico
-    df['user_operative_system_skip_rate'] = historical_rate(
-        df, ['username', 'operative_system'], out_name='user_operative_system_skip_rate'
-    )
-    df['user_operative_system_skip_rate'] = df['user_operative_system_skip_rate'].astype(float)  # fuerza tipo numérico
+    # Skip rates básicos
+    df = processRate(df, 'global_month_skip_rate', ['month_played_ts'])
+    df = processRate(df, 'track_skip_rate', ['spotify_track_uri'])
+    df = processRate(df, 'artist_skip_rate', ['master_metadata_album_artist_name'])
+    df = processRate(df, 'user_skip_rate', ['username'])
+    df = processRate(df, 'user_operative_system_skip_rate', ['username', 'operative_system'])
+    df = processRate(df, 'user_explicit_skip_rate', ['username', 'explicit'])
+    df = processRate(df, 'user_hour_skip_rate', ['username', 'hour_of_day_ts'])
+    df = processRate(df, 'user_weekday_skip_rate', ['username', 'weekday_ts'])
+    df = processRate(df, 'user_known_artist_skip_rate', ['username', 'master_metadata_album_artist_name'])
+    df = processRate(df, 'user_shuffled_skip_rate', ['username', 'shuffle'])
+    df = processRate(df, 'user_offline_skip_rate', ['username', 'offline'])
 
-    # 3) track skip rate histórico
-    df['track_skip_rate'] = historical_rate(
-        df, ['spotify_track_uri'], out_name='track_skip_rate'
-    )
-    df['track_skip_rate'] = df['track_skip_rate'].astype(float)  # fuerza tipo numérico
+    # Duración promedio de tracks por usuario
+    df['user_avg_track_duration_skipped'] = df.groupby('username').apply(
+        lambda x: (x['duration_ms'] * x['target']).expanding().mean().shift()
+    ).reset_index(level=0, drop=True).fillna(df['duration_ms'].mean()).astype(np.float32)
 
-    # 4) artist skip rate histórico
-    df['artist_skip_rate'] = historical_rate(
-        df, ['master_metadata_album_artist_name'], out_name='artist_skip_rate'
-    )
-    df['artist_skip_rate'] = df['artist_skip_rate'].astype(float)  # fuerza tipo numérico
+    df['user_avg_track_duration_not_skipped'] = df.groupby('username').apply(
+        lambda x: (x['duration_ms'] * (1 - x['target'])).expanding().mean().shift()
+    ).reset_index(level=0, drop=True).fillna(df['duration_ms'].mean()).astype(np.float32)
 
-    # 5) user explicit skip rate histórico (user x explicit flag)
-    # explicit puede ser bool o 0/1/NaN; dejamos tal cual
-    df['user_explicit_skip_rate'] = historical_rate(
-        df, ['username', 'explicit'], out_name='user_explicit_skip_rate'
-    )
-    df['user_explicit_skip_rate'] = df['user_explicit_skip_rate'].astype(float)  # fuerza tipo numérico
+    # Preferencias según antigüedad de canción
+    age_buckets = {
+        'new': (0, 3),
+        'old': (3, 20),
+        'extremely_old': (20, 100)
+    }
+    df['user_preference_this_age'] = np.nan
+    for low, high in age_buckets.values():
+        mask = df['song_age_years'].between(low, high, inclusive='left')
+        
+        if mask.any():
+            # Historial de skips del usuario solo para ese bucket
+            tmp = df.loc[mask].groupby('username', observed=True)['target'].cumsum() - df.loc[mask, 'target']
+            count = df.loc[mask].groupby('username', observed=True).cumcount()
+            rate = tmp / count.replace(0, np.nan)
+            
+            # Asignamos el rate histórico
+            df.loc[mask, 'user_preference_this_age'] = rate.fillna(global_mean).astype(np.float32)
+    df['user_preference_this_age'] = df['user_preference_this_age'].fillna(global_mean)
 
-    # 6) user hour-of-day skip rate histórico (opcional útil)
-    df['user_hour_skip_rate'] = historical_rate(
-        df, ['username', 'hour_of_day_ts'], out_name='user_hour_skip_rate'
-    )
-    df['user_hour_skip_rate'] = df['user_hour_skip_rate'].astype(float)  # fuerza tipo numérico
+    # Último tiempo de reproducción
+    df['user_time_since_last_play'] = df.groupby('username')['ts'].diff().dt.total_seconds() / 60
+    df['user_time_since_last_play'] = df['user_time_since_last_play'].astype(np.float32)
+
+    # Consumo fin de semana por artista
+    g = df.groupby(['username', 'master_metadata_album_artist_name'], observed=True)['weekday_ts']
+    df['user_artist_weekend_consumed'] = (g.cummax() >= 5).astype(np.uint8)
+
+    # Track / album / artist / genre vistos antes
+    df['user_track_seen_before'] = df.groupby('username')['spotify_track_uri'].cumcount().gt(0).astype(np.uint8)
+    df['user_artist_seen_before'] = df.groupby('username')['master_metadata_album_artist_name'].cumcount().gt(0).astype(np.uint8)
+
+    # Counts históricos de escuchas
+    df['user_artist_listens_count'] = df.groupby(['username', 'master_metadata_album_artist_name']).cumcount()
+    df['user_track_listens_count'] = df.groupby(['username', 'spotify_track_uri']).cumcount()
 
     return df
 
 def applyHistoricalFeaturesToSet(df_target, df_train):
+    df_target = applyHistoricalNonUserFeaturesToSet(df_target, df_train)
+    df_target = applyHistoricalUserFeaturesToSet(df_target, df_train)
+    return df_target
+
+def applyHistoricalUserFeaturesToSet(df_target, df_train):
+    df_target = df_target.copy()
+    
+    # Base de datos de últimos valores por usuario
     user_last = (
         df_train.sort_values(['username', 'ts'])
         .groupby('username')
@@ -335,14 +375,64 @@ def applyHistoricalFeaturesToSet(df_target, df_train):
         [[
             'user_skip_rate',
             'user_operative_system_skip_rate',
-            'track_skip_rate',
-            'artist_skip_rate',
             'user_explicit_skip_rate',
-            'user_hour_skip_rate'
+            'user_hour_skip_rate',
+            'user_weekday_skip_rate',
+            'user_known_artist_skip_rate',
+            'user_shuffled_skip_rate',
+            'user_offline_skip_rate',
+            'user_avg_track_duration_skipped',
+            'user_avg_track_duration_not_skipped',
+            'user_preference_this_age',
+            'user_time_since_last_play',
+            'user_artist_weekend_consumed',
+            'user_track_seen_before',
+            'user_artist_seen_before',
+            'user_artist_listens_count',
+            'user_track_listens_count'
         ]]
     )
 
+    # Merge
     df_target = df_target.merge(user_last, on='username', how='left')
+
+    return df_target
+
+def applyHistoricalNonUserFeaturesToSet(df_target, df_train):
+    """
+    Aplica features históricas del set de train a df_target para:
+    - global_month_skip_rate
+    - track_skip_rate
+    - artist_skip_rate
+
+    df_target: dataframe donde queremos aplicar los features
+    df_train: dataframe de entrenamiento ya procesado con createNewSetFeatures
+    """
+    df_target = df_target.copy()
+    global_mean = df_train['target'].mean()
+
+    # 1) global_month_skip_rate
+    if 'month_played_ts' in df_target.columns:
+        tmp = df_train.groupby('month_played_ts', observed=True)['target'].cumsum() - df_train['target']
+        count = df_train.groupby('month_played_ts', observed=True).cumcount()
+        rate = tmp / count.replace(0, np.nan)
+        month_rate_map = rate.groupby(df_train['month_played_ts']).last().fillna(global_mean)
+        df_target['global_month_skip_rate'] = df_target['month_played_ts'].map(month_rate_map).astype(np.float32)
+
+    # 2) track_skip_rate
+    tmp = df_train.groupby('spotify_track_uri', observed=True)['target'].cumsum() - df_train['target']
+    count = df_train.groupby('spotify_track_uri', observed=True).cumcount()
+    rate = tmp / count.replace(0, np.nan)
+    track_rate_map = rate.groupby(df_train['spotify_track_uri']).last().fillna(global_mean)
+    df_target['track_skip_rate'] = df_target['spotify_track_uri'].map(track_rate_map).astype(np.float32)
+
+    # 3) artist_skip_rate
+    tmp = df_train.groupby('master_metadata_album_artist_name', observed=True)['target'].cumsum() - df_train['target']
+    count = df_train.groupby('master_metadata_album_artist_name', observed=True).cumcount()
+    rate = tmp / count.replace(0, np.nan)
+    artist_rate_map = rate.groupby(df_train['master_metadata_album_artist_name']).last().fillna(global_mean)
+    df_target['artist_skip_rate'] = df_target['master_metadata_album_artist_name'].map(artist_rate_map).astype(np.float32)
+
     return df_target
 
 def createNewTimeBasedFeatures(df, field):

@@ -17,6 +17,10 @@ user_unique_artists_ratio: nº de artistas distintos / total escuchas → mide d
 user_novelty_rate: proporción de canciones “nuevas” (release < 30 días) que escucha.
 user_replay_rate: proporción de canciones repetidas.
 
+popularity_bin: segmentar popularidad en buckets (p. ej. bajo <30, medio 30–70, alto >70).
+track_duration_bin: segmentar duración de canción en categorías (no tener en cuenta duración de podcasts para no alterar) y obtener skip rate promedio por bin.
+episode_duration_bin: segmentar duración de episodio en categorías (no tener en cuenta duración de tracks para no alterar) y obtener skip rate promedio por bin.
+
 # 
 is_mobile_device: booleana derivada del operative_system (iOS/Android).
 is_new_release: tiempo de release menor a 30 días
@@ -34,6 +38,22 @@ user_var_listen_count: varianza de cantidad de canciones por sesión por usuario
 user_mean_listen_duration: media de minutos escuchados por sesión por usuario
 user_var_listen_duration: varianza de minutos escuchados por sesión por usuario
 user_session_popular_gender: genero más popular escuchado en la sesión
+
+
+# Calcular métricas por user y agregar columnas sobre esas variables. Ejemplo:
+user_likes_this_genre: proporción de canciones escuchadas por el usuario con alguno de los géneros actuales.
+user_rarely_listens_this_genre: si el género actual está fuera de su top N géneros más reproducidos.
+genre_novelty: qué tan distinto es el género actual respecto al historial (diversidad o exploración).
+genre_repetition: si repite un género que ya escuchó recientemente.
+proportion_danceable_listened: 
+proportion_romantic_listened: 
+proportion_spanish_listened: 
+proportion_modern_listened: 
+user_avg_genre_entropy: 
+user_main_language:  (por moda)
+user_top_genre_cluster:  (cluster dominante)
+user_prefers_high_energy:  (porcentaje de temas de alta energía escuchados)
+user_skips_rate_for_chill_genres:  (si podés cruzar con el target anterior)
 
 
 
