@@ -5,6 +5,7 @@ from sklearn.cluster import KMeans
 import datetime
 import numpy as np
 import constants as C
+import json
 
 # Carga del dataset
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
@@ -75,13 +76,25 @@ def split_x_and_y(df):
     return X, y
 
 # Procesado luego de entrenar el modelo y obtener los mejores hiperparámetros
-def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_ids):
+def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_ids, best_params=None):
+    now = datetime.datetime.now()
+
+    # Save params
+    if best_params is not None:
+        filename_params = f"resultados/modelo_benchmark_{now.strftime('%Y%m%d_%H%M%S')}_params.json"
+        with open(filename_params, 'w') as f:
+            json.dump(best_params, f, indent=4)  # indent=4 para que quede legible
+        print(f"  --> Params written to '{filename_params}'")
+
     # Display top feature importances
     print("\nExtracting and sorting feature importances...")
     importances = model.feature_importances_
     imp_series = pd.Series(importances, index=model.get_booster().feature_names)
     imp_series = imp_series.drop(labels=["obs_id"], errors="ignore")
     imp_sorted = imp_series.sort_values(ascending=False)
+    filename_imp = f"resultados/modelo_benchmark_{now.strftime('%Y%m%d_%H%M%S')}_imp.csv"
+    imp_sorted.to_csv(filename_imp, header=False)
+    print(f"  --> Importances written to '{filename_imp}'")
     print("\nTop feature importances:")
     print(imp_sorted)
 
@@ -95,8 +108,11 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
     print("\nGenerating final predictions for test set...")
     preds_proba = model.predict_proba(X_test_to_predict)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
-    preds_df.to_csv("modelo_benchmark.csv", index=False, sep=",")
-    print(f"  --> Predictions written to 'modelo_benchmark.csv'")
+
+    # Save final predictions
+    filename = f"resultados/modelo_benchmark_{now.strftime('%Y%m%d_%H%M%S')}.csv"
+    preds_df.to_csv(filename, index=False, sep=",")
+    print(f"  --> Predictions written to '{filename}'")
 
 #######################
 # PRE PROCESAMIENTO
@@ -135,7 +151,6 @@ def cast_column_types(df):
         "is_kids_genre": bool,
         "is_comedy_genre": bool,
         "is_spanish": bool,
-        "has_japanese_genres": bool,
         "has_local_genre": bool,
         "has_latin_genre": bool,
         "has_low_energy_genre": bool,
@@ -176,7 +191,7 @@ def keepImportantColumnsDefault(df):
         "time_since_release", "release_date_year", "release_date_month", "song_age_years", # release date,
         "genre1", "genre2", "genre3", # genero
         "has_popular_artist_genre", "has_rare_artist_genre", "is_kids_genre", "is_comedy_genre", "is_spanish", # genero
-        "has_japanese_genres", "has_local_genre", "has_latin_genre", "has_low_energy_genre", "has_high_energy_genre", # genero
+        "has_local_genre", "has_latin_genre", "has_low_energy_genre", "has_high_energy_genre", # genero
         "has_heavy_genre", "has_party_genre", "has_romantic_genre", "has_relaxing_genre", "has_instrumental_genre", # genero
         "ts", "spotify_track_uri" # Conservar auxiliares para procesamiento futuro
     ]
@@ -314,11 +329,11 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
     df = processRate(df, 'user_offline_skip_rate', ['username', 'offline'])
 
     # Duración promedio de tracks por usuario
-    df['user_avg_track_duration_skipped'] = df.groupby('username').apply(
+    df['user_avg_track_duration_skipped'] = df.groupby('username', observed=True).apply(
         lambda x: (x['duration_ms'] * x['target']).expanding().mean().shift()
     ).reset_index(level=0, drop=True).fillna(df['duration_ms'].mean()).astype(np.float32)
 
-    df['user_avg_track_duration_not_skipped'] = df.groupby('username').apply(
+    df['user_avg_track_duration_not_skipped'] = df.groupby('username', observed=True).apply(
         lambda x: (x['duration_ms'] * (1 - x['target'])).expanding().mean().shift()
     ).reset_index(level=0, drop=True).fillna(df['duration_ms'].mean()).astype(np.float32)
 
@@ -343,20 +358,16 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
     df['user_preference_this_age'] = df['user_preference_this_age'].fillna(global_mean)
 
     # Último tiempo de reproducción
-    df['user_time_since_last_play'] = df.groupby('username')['ts'].diff().dt.total_seconds() / 60
+    df['user_time_since_last_play'] = df.groupby('username', observed=True)['ts'].diff().dt.total_seconds() / 60
     df['user_time_since_last_play'] = df['user_time_since_last_play'].astype(np.float32)
 
     # Consumo fin de semana por artista
     g = df.groupby(['username', 'master_metadata_album_artist_name'], observed=True)['weekday_ts']
     df['user_artist_weekend_consumed'] = (g.cummax() >= 5).astype(np.uint8)
 
-    # Track / album / artist / genre vistos antes
-    df['user_track_seen_before'] = df.groupby('username')['spotify_track_uri'].cumcount().gt(0).astype(np.uint8)
-    df['user_artist_seen_before'] = df.groupby('username')['master_metadata_album_artist_name'].cumcount().gt(0).astype(np.uint8)
-
     # Counts históricos de escuchas
-    df['user_artist_listens_count'] = df.groupby(['username', 'master_metadata_album_artist_name']).cumcount()
-    df['user_track_listens_count'] = df.groupby(['username', 'spotify_track_uri']).cumcount()
+    df['user_artist_listens_count'] = df.groupby(['username', 'master_metadata_album_artist_name'], observed=True).cumcount()
+    df['user_track_listens_count'] = df.groupby(['username', 'spotify_track_uri'], observed=True).cumcount()
 
     return df
 
@@ -371,7 +382,7 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
     # Base de datos de últimos valores por usuario
     user_last = (
         df_train.sort_values(['username', 'ts'])
-        .groupby('username')
+        .groupby('username', observed=True)
         .tail(1)
         .set_index('username')
         [[
@@ -388,8 +399,6 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
             'user_preference_this_age',
             'user_time_since_last_play',
             'user_artist_weekend_consumed',
-            'user_track_seen_before',
-            'user_artist_seen_before',
             'user_artist_listens_count',
             'user_track_listens_count'
         ]]
@@ -418,21 +427,21 @@ def applyHistoricalNonUserFeaturesToSet(df_target, df_train):
         tmp = df_train.groupby('month_played_ts', observed=True)['target'].cumsum() - df_train['target']
         count = df_train.groupby('month_played_ts', observed=True).cumcount()
         rate = tmp / count.replace(0, np.nan)
-        month_rate_map = rate.groupby(df_train['month_played_ts']).last().fillna(global_mean)
+        month_rate_map = rate.groupby(df_train['month_played_ts'], observed=True).last().fillna(global_mean)
         df_target['global_month_skip_rate'] = df_target['month_played_ts'].map(month_rate_map).astype(np.float32)
 
     # 2) track_skip_rate
     tmp = df_train.groupby('spotify_track_uri', observed=True)['target'].cumsum() - df_train['target']
     count = df_train.groupby('spotify_track_uri', observed=True).cumcount()
     rate = tmp / count.replace(0, np.nan)
-    track_rate_map = rate.groupby(df_train['spotify_track_uri']).last().fillna(global_mean)
+    track_rate_map = rate.groupby(df_train['spotify_track_uri'], observed=True).last().fillna(global_mean)
     df_target['track_skip_rate'] = df_target['spotify_track_uri'].map(track_rate_map).astype(np.float32)
 
     # 3) artist_skip_rate
     tmp = df_train.groupby('master_metadata_album_artist_name', observed=True)['target'].cumsum() - df_train['target']
     count = df_train.groupby('master_metadata_album_artist_name', observed=True).cumcount()
     rate = tmp / count.replace(0, np.nan)
-    artist_rate_map = rate.groupby(df_train['master_metadata_album_artist_name']).last().fillna(global_mean)
+    artist_rate_map = rate.groupby(df_train['master_metadata_album_artist_name'], observed=True).last().fillna(global_mean)
     df_target['artist_skip_rate'] = df_target['master_metadata_album_artist_name'].map(artist_rate_map).astype(np.float32)
 
     return df_target

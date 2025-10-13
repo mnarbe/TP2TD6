@@ -28,7 +28,7 @@ def main():
     df = df.sort_values(["obs_id"])
     df = processTargetAndTestMask(df)
     df = keepImportantColumnsDefault(df)
-    df.drop(columns=["ts", "spotify_track_uri"]) # No la necesitamos en este main
+    df = df.drop(columns=["ts", "spotify_track_uri"]) # No la necesitamos en este main
     
     # Split off the actual test set for final predictions
     X_train_dataset, X_test_to_predict, y_train_dataset, _ = split_train_test(df)

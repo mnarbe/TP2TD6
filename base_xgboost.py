@@ -7,6 +7,7 @@ from sklearn.model_selection import KFold, GridSearchCV, KFold, ParameterGrid
 import xgboost as xgb
 from sklearn.metrics import roc_auc_score
 from hyperopt import hp, fmin, tpe, space_eval, STATUS_OK
+from tqdm import tqdm
 
 def train_classifier_xgboost(X_train, y_train, params=None):
     """
@@ -82,6 +83,103 @@ def objective_temporal(params, X_train, y_train, X_val, y_val):
     
     return {"loss": 1 - auc, "status": STATUS_OK}
 
+################################################
+########      Feature Selection      ###########
+################################################
+
+def backward_feature_selection(
+    X_train, y_train,
+    X_val, y_val,
+    min_features=20,
+    xgb_params=None,
+    early_stopping_rounds=20,
+    verbose=True,
+    save_path="resultados/selected_features.csv"
+):
+    """
+    Realiza backward feature elimination con XGBoost usando 'gain' como criterio de importancia
+    y selecciona automáticamente la cantidad óptima de features según AUC en validación.
+    """
+
+    if xgb_params is None:
+        xgb_params = {
+            "n_estimators": 200,
+            "max_depth": 5,
+            "learning_rate": 0.1,
+            "subsample": 0.8,
+            "colsample_bytree": 0.7,
+            "reg_lambda": 10,
+            "reg_alpha": 3,
+            "min_child_weight": 5
+        }
+
+    features = list(X_train.columns)
+    history = []
+
+    pbar = tqdm(total=len(features) - min_features, disable=not verbose)
+
+    while len(features) >= min_features:
+        # Entrenar modelo
+        model = xgb.XGBClassifier(
+            objective='binary:logistic',
+            seed=C.RAND_SEED_3,
+            eval_metric='auc',
+            enable_categorical=True,
+            early_stopping_rounds=early_stopping_rounds,
+            **xgb_params
+        )
+        model.fit(
+            X_train[features], y_train,
+            eval_set=[(X_val[features], y_val)],
+            verbose=False
+        )
+
+        # Guardar score actual
+        auc = model.best_score
+        history.append({
+            "n_features": len(features),
+            "val_auc": auc,
+            "removed_feature": None if len(features) == len(X_train.columns) else last_removed
+        })
+
+        # Cortar si llegamos al mínimo de features
+        if len(features) == min_features:
+            break
+
+        # Importancias
+        booster = model.get_booster()
+        imp = booster.get_score(importance_type="gain")
+        imp_series = pd.Series({f: imp.get(f, 0.0) for f in features})
+
+        # Feature menos importante
+        least_important = imp_series.idxmin()
+
+        # Eliminarla y guardar cuál fue
+        last_removed = least_important
+        features.remove(least_important)
+
+        pbar.update(1)
+
+    pbar.close()
+
+    # Buscar cantidad óptima de features
+    history_df = pd.DataFrame(history)
+    best_row = history_df.loc[history_df['val_auc'].idxmax()]
+    best_n = int(best_row['n_features'])
+    best_auc = best_row['val_auc']
+
+    # Para saber cuáles son las features finales, debemos simular el camino
+    final_features = list(X_train.columns)
+    removed_order = [h['removed_feature'] for h in history if h['removed_feature'] is not None]
+    while len(final_features) > best_n:
+        final_features.remove(removed_order.pop(0))
+    
+    if save_path is not None:
+        pd.Series(final_features).to_csv(save_path, index=False, header=False)
+        if verbose:
+            print(f"✅ Features seleccionadas guardadas en: {save_path}")
+
+    return history_df, final_features, best_auc
 
 ################################################
 #########      Modelos XGBoost      ############
@@ -220,16 +318,16 @@ def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
     
     # Define hyperparameter space
     space = {
-        'max_depth': hp.uniformint('max_depth', 3, 15),
+        'max_depth': hp.uniformint('max_depth', 3, 10),
         'gamma': hp.uniform('gamma', 0, 5),
-        'learning_rate': hp.uniform('learning_rate', 0.01, 0.3),
+        'learning_rate': hp.uniform('learning_rate', 0.01, 0.1),
         'reg_lambda': hp.uniform('reg_lambda', 0, 10),
         'reg_alpha': hp.uniform('reg_alpha', 0, 10),
         'subsample': hp.uniform('subsample', 0.6, 1),
-        'colsample_bytree': hp.uniform('colsample_bytree', 0.6, 1),
-        'colsample_bylevel': hp.uniform('colsample_bylevel', 0.6, 1),
-        'n_estimators': hp.uniformint('n_estimators', 100, 1000),
-        'min_child_weight': hp.uniformint('min_child_weight', 1, 15)
+        'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 0.8),
+        'colsample_bylevel': hp.uniform('colsample_bylevel', 0.6, 0.9),
+        'n_estimators': hp.uniformint('n_estimators', 150, 700),
+        'min_child_weight': hp.uniformint('min_child_weight', 1, 10)
     }
     
     # Run hyperparameter optimization

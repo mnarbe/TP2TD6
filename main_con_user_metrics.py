@@ -1,14 +1,17 @@
 import pandas as pd
 import time
 from database_utils import load_competition_datasets, cast_column_types, split_train_test_df,split_x_and_y, processFinalInformation, createNewFeatures, applyHistoricalFeaturesToSet, processTargetAndTestMask, keepImportantColumnsDefault, createNewSetFeatures, simple_clustering
-from base_xgboost import trainXGBoostModelTemporal
+from base_xgboost import trainXGBoostModelTemporal, backward_feature_selection
 import constants as C
+import os
 
 pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
 PORCENTAJE_DATASET_UTILIZADO = 1 # Porcentaje del dataset a utilizar
 MAX_EVALS_BAYESIAN = 7 # Cantidad de iteraciones para la optimización bayesiana
+FEATURE_SELECTION_FILE = "resultados/selected_features.csv"
+MIN_FEATURES = 20
 
 def main():
     start = time.time()
@@ -90,32 +93,59 @@ def main():
     X_test_to_predict_features = X_test_to_predict.drop(columns=["obs_id", "year_ts", "ts", "spotify_track_uri"])
 
     # ===================================================
-    # 9. Entrenar modelo
+    # 9. Aplicar K-Means
+    # ===================================================
+    # SOLO entrenar K-means en train
+    print(f"Entrenando K-Means en train set...")
+    X_train_features, kmeans_model = simple_clustering(X_train_features, n_clusters=3)
+
+    # Aplicar el MISMO modelo a validation y test
+    print(f"Agrego K-Means model a valid y test...")
+    X_val_features, _ = simple_clustering(X_val_features, kmeans_model=kmeans_model)
+    X_test_features, _ = simple_clustering(X_test_features, kmeans_model=kmeans_model)
+    X_test_to_predict_features, _ = simple_clustering(X_test_to_predict_features, kmeans_model=kmeans_model)
+
+    # ===================================================
+    # 10. Aplicar Feature Selection
+    # ===================================================
+
+    print(f"Aplico feature selection...")
+    feature_file = FEATURE_SELECTION_FILE
+    if feature_file is not None and os.path.exists(feature_file):
+        selected_features = pd.read_csv(feature_file, header=None).iloc[:, 0].tolist()
+    else:
+        history_df, selected_features, best_auc = backward_feature_selection(
+            X_train_features, y_train,
+            X_val_features, y_val,
+            min_features=MIN_FEATURES,
+            xgb_params=None,
+            early_stopping_rounds=50,
+            verbose=True
+        )
+
+    X_train_selected = X_train_features[selected_features].copy()
+    X_val_selected = X_val_features[selected_features].copy()
+    X_test_selected = X_test_features[selected_features].copy()
+    X_test_to_predict_selected = X_test_to_predict_features[selected_features].copy()
+
+    # ===================================================
+    # 11. Entrenar modelo
     # ===================================================
     print(f"Target distribution in training: {y_train.mean():.4f}")
     print(f"Target distribution in validation: {y_val.mean():.4f}")
 
-
-    # SOLO entrenar K-means en train
-    X_train_features, kmeans_model = simple_clustering(X_train_features, n_clusters=3)
-
-    # Aplicar el MISMO modelo a validation
-    X_val_features, _ = simple_clustering(X_val_features, kmeans_model=kmeans_model)
-    
     # Train model with temporal validation using the NEW function
     model = trainXGBoostModelTemporal(
-        X_train_features, y_train, 
-        X_val_features, y_val, 
+        X_train_selected, y_train, 
+        X_val_selected, y_val, 
         MAX_EVALS_BAYESIAN
     )
 
     # ===================================================
-    # 10. Evaluar y generar predicciones finales
+    # 12. Evaluar y generar predicciones finales
     # ===================================================
 
-    X_test_features, _ = simple_clustering(X_test_features, kmeans_model=kmeans_model)
-
-    processFinalInformation(model, X_test_features, y_test, X_test_to_predict_features, test_obs_ids)
+    processFinalInformation(model, X_test_selected, y_test, X_test_to_predict_selected, test_obs_ids, best_params=model.get_params())
 
     print("=== Pipeline complete ===")
     end = time.time()
