@@ -1,6 +1,6 @@
 import pandas as pd
 import time
-from database_utils import load_competition_datasets, cast_column_types, split_train_test_df,split_x_and_y, processFinalInformation, createNewFeatures, applyHistoricalFeaturesToSet, processTargetAndTestMask, keepImportantColumnsDefault, createNewSetFeatures
+from database_utils import load_competition_datasets, cast_column_types, split_train_test_df,split_x_and_y, processFinalInformation, createNewFeatures, applyHistoricalFeaturesToSet, processTargetAndTestMask, keepImportantColumnsDefault, createNewSetFeatures, simple_clustering
 from base_xgboost import trainXGBoostModelTemporal
 import constants as C
 
@@ -95,6 +95,13 @@ def main():
     print(f"Target distribution in training: {y_train.mean():.4f}")
     print(f"Target distribution in validation: {y_val.mean():.4f}")
 
+
+    # SOLO entrenar K-means en train
+    X_train_features, kmeans_model = simple_clustering(X_train_features, n_clusters=3)
+
+    # Aplicar el MISMO modelo a validation
+    X_val_features, _ = simple_clustering(X_val_features, kmeans_model=kmeans_model)
+    
     # Train model with temporal validation using the NEW function
     model = trainXGBoostModelTemporal(
         X_train_features, y_train, 
@@ -105,6 +112,9 @@ def main():
     # ===================================================
     # 10. Evaluar y generar predicciones finales
     # ===================================================
+
+    X_test_features, _ = simple_clustering(X_test_features, kmeans_model=kmeans_model)
+
     processFinalInformation(model, X_test_features, y_test, X_test_to_predict_features, test_obs_ids)
 
     print("=== Pipeline complete ===")

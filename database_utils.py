@@ -1,8 +1,10 @@
 import os
 import pandas as pd
 from sklearn.metrics import roc_auc_score
+from sklearn.cluster import KMeans
 import datetime
 import numpy as np
+import constants as C
 
 # Carga del dataset
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
@@ -478,3 +480,20 @@ def momento_del_dia(hora):
 
 def es_finde(dia):
     return dia.weekday() >= 5
+
+def simple_clustering(df, kmeans_model=None, n_clusters=3):
+    """Versión corregida que permite usar un modelo existente o entrenar uno nuevo"""
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    numeric_cols = [col for col in numeric_cols if col not in ['obs_id', 'year_ts', 'target']]
+    
+    X_numeric = df[numeric_cols].fillna(0)
+    
+    if kmeans_model is None:
+        # Entrenar nuevo modelo (solo para train)
+        kmeans_model = KMeans(n_clusters=n_clusters, random_state=C.RAND_SEED, n_init=20)
+        df['cluster'] = kmeans_model.fit_predict(X_numeric).astype('int')
+    else:
+        # Usar modelo existente (para validation/test)
+        df['cluster'] = kmeans_model.predict(X_numeric).astype('int')
+    
+    return df, kmeans_model
