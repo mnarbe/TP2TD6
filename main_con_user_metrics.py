@@ -9,9 +9,10 @@ pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
 PORCENTAJE_DATASET_UTILIZADO = 1 # Porcentaje del dataset a utilizar
-MAX_EVALS_BAYESIAN = 10 # Cantidad de iteraciones para la optimización bayesiana
+MAX_EVALS_BAYESIAN = 8 # Cantidad de iteraciones para la optimización bayesiana
 FEATURE_SELECTION_FILE = "resultados/selected_features.csv"
 MIN_FEATURES = 15
+TOP_N_USED = 8
 
 def main():
     start = time.time()
@@ -80,6 +81,7 @@ def main():
     print(f"  --> final validation set (early 2024): {df_val_real.shape[0]} rows")
     print(f"  --> final test set (late 2024): {df_test.shape[0]} rows")
 
+
     # ===================================================
     # 7. Separar X e y
     # ===================================================
@@ -87,6 +89,10 @@ def main():
     X_val, y_val = split_x_and_y(df_val_real)
     X_test, y_test = split_x_and_y(df_test)
     
+    print(f"  --> Target distribution in training: {y_train.mean():.4f}")
+    print(f"  --> Target distribution in validation: {y_val.mean():.4f}")
+    print(f"  --> Target distribution in test: {y_test.mean():.4f}")
+
     # ===================================================
     # 8. Drop columnas auxiliares
     # ===================================================
@@ -95,18 +101,25 @@ def main():
     X_test_features = X_test.drop(columns=["obs_id", "year_ts", "ts", "spotify_track_uri"])
     X_test_to_predict_features = X_test_to_predict.drop(columns=["obs_id", "year_ts", "ts", "spotify_track_uri"])
 
+    # Drop columnas de skip rate
+    cols_to_drop = [col for col in X_train.columns if "skip" in col]
+    X_train_features = X_train_features.drop(columns=cols_to_drop, errors="ignore")
+    X_val_features = X_val_features.drop(columns=cols_to_drop, errors="ignore")
+    X_test_features = X_test_features.drop(columns=cols_to_drop, errors="ignore")
+    X_test_to_predict_features = X_test_to_predict_features.drop(columns=cols_to_drop, errors="ignore")
+
     # ===================================================
     # 9. Aplicar K-Means
     # ===================================================
-    # SOLO entrenar K-means en train
-    print(f"Entrenando K-Means en train set...")
-    X_train_features, kmeans_model = simple_clustering(X_train_features, n_clusters=3)
+    # # SOLO entrenar K-means en train
+    # print(f"Entrenando K-Means en train set...")
+    # X_train_features, kmeans_model = simple_clustering(X_train_features, n_clusters=3)
 
-    # Aplicar el MISMO modelo a validation y test
-    print(f"Agrego K-Means model a valid y test...")
-    X_val_features, _ = simple_clustering(X_val_features, kmeans_model=kmeans_model)
-    X_test_features, _ = simple_clustering(X_test_features, kmeans_model=kmeans_model)
-    X_test_to_predict_features, _ = simple_clustering(X_test_to_predict_features, kmeans_model=kmeans_model)
+    # # Aplicar el MISMO modelo a validation y test
+    # print(f"Agrego K-Means model a valid y test...")
+    # X_val_features, _ = simple_clustering(X_val_features, kmeans_model=kmeans_model)
+    # X_test_features, _ = simple_clustering(X_test_features, kmeans_model=kmeans_model)
+    # X_test_to_predict_features, _ = simple_clustering(X_test_to_predict_features, kmeans_model=kmeans_model)
 
     # ===================================================
     # 10. Aplicar Feature Selection
@@ -115,40 +128,41 @@ def main():
     print(f"Aplico feature selection...")
     feature_file = FEATURE_SELECTION_FILE
     if feature_file is not None and os.path.exists(feature_file):
-        selected_features = pd.read_csv(feature_file, header=None).iloc[:, 0].tolist()
+        selected_features_list = [pd.read_csv(feature_file, header=None).iloc[:, 0].tolist()]
     else:
-        selected_features = backward_feature_selection_topN(
+        selected_features_list = backward_feature_selection_topN(
             X_train_features, y_train,
             X_val_features, y_val,
             min_features=MIN_FEATURES,
+            topN_used=TOP_N_USED,
             xgb_params=None,
             early_stopping_rounds=50,
             verbose=True
         )
 
-    X_train_selected = X_train_features[selected_features].copy()
-    X_val_selected = X_val_features[selected_features].copy()
-    X_test_selected = X_test_features[selected_features].copy()
-    X_test_to_predict_selected = X_test_to_predict_features[selected_features].copy()
+    # Para cada set de features
+    for i, selected_features in enumerate(selected_features_list, start=1):
+        X_train_selected = X_train_features[selected_features].copy()
+        X_val_selected = X_val_features[selected_features].copy()
+        X_test_selected = X_test_features[selected_features].copy()
+        X_test_to_predict_selected = X_test_to_predict_features[selected_features].copy()
 
-    # ===================================================
-    # 11. Entrenar modelo
-    # ===================================================
-    print(f"Target distribution in training: {y_train.mean():.4f}")
-    print(f"Target distribution in validation: {y_val.mean():.4f}")
+        # ===================================================
+        # 11. Entrenar modelo
+        # ===================================================
 
-    # Train model with temporal validation using the NEW function
-    model = trainXGBoostModelTemporal(
-        X_train_selected, y_train, 
-        X_val_selected, y_val, 
-        MAX_EVALS_BAYESIAN
-    )
+        # Train model with temporal validation using the NEW function
+        model = trainXGBoostModelTemporal(
+            X_train_selected, y_train, 
+            X_val_selected, y_val, 
+            MAX_EVALS_BAYESIAN
+        )
 
-    # ===================================================
-    # 12. Evaluar y generar predicciones finales
-    # ===================================================
+        # ===================================================
+        # 12. Evaluar y generar predicciones finales
+        # ===================================================
 
-    processFinalInformation(model, X_test_selected, y_test, X_test_to_predict_selected, test_obs_ids, best_params=model.get_params())
+        processFinalInformation(model, X_test_selected, y_test, X_test_to_predict_selected, test_obs_ids, best_params=model.get_params())
 
     print("=== Pipeline complete ===")
     end = time.time()

@@ -187,7 +187,7 @@ def keepImportantColumnsDefault(df):
         "conn_country", "operative_system", "is_mobile", # De contexto
         "is_track", "master_metadata_album_artist_name", "master_metadata_track_name", "track_number", # De canciones
         "is_podcast", "episode_name", "show_name", "show_publisher", "show_total_episodes", # De podcasts
-        "is_short_track", "is_long_track", "duration_ms", "explicit", "popularity", # Características de la pista
+        "track_duration_ms", "podcast_duration_ms", "explicit", "popularity", # Características de la pista
         "time_since_release", "release_date_year", "release_date_month", "song_age_years", # release date,
         "genre1", "genre2", "genre3", "user_last_song_different", # genero
         "has_popular_artist_genre", "has_rare_artist_genre", "is_kids_genre", "is_comedy_genre", "is_spanish", # genero
@@ -236,17 +236,8 @@ def createNewFeatures(df):
     df["is_track"] = df["master_metadata_track_name"].notna().astype("uint8")
     df["is_podcast"] = df["episode_name"].notna().astype("uint8")
 
-    # Add track duration indicators
-    df["is_short_track"] = (
-        (df["duration_ms"].notna()) &
-        (df["duration_ms"] <= 90000) &
-        (df["is_track"] == True)
-    ).astype("bool")
-    df["is_long_track"] = (
-        (df["duration_ms"].notna()) &
-        (df["duration_ms"] > 360000) &
-        (df["is_track"] == True)
-    ).astype("bool")
+    df["track_duration_ms"] = df["duration_ms"].where(df["is_track"] == 1, 0).fillna(0).astype("uint32")
+    df["podcast_duration_ms"] = df["duration_ms"].where(df["is_podcast"] == 1, 0).fillna(0).astype("uint64")
 
     # Diferencia con la canción anterior escuchada
     df['prev_genre1'] = df.groupby('username', observed=True)['genre1'].shift(1)
@@ -392,12 +383,21 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
 
     # Duración promedio de tracks por usuario
     df['user_avg_track_duration_skipped'] = df.groupby('username', observed=True).apply(
-        lambda x: (x['duration_ms'] * x['target']).expanding().mean().shift()
-    ).reset_index(level=0, drop=True).fillna(df['duration_ms'].mean()).astype(np.float32)
+        lambda x: (x['track_duration_ms'] * x['target']).expanding().mean().shift()
+    ).reset_index(level=0, drop=True).fillna(df['track_duration_ms'].mean()).astype(np.float32)
 
     df['user_avg_track_duration_not_skipped'] = df.groupby('username', observed=True).apply(
-        lambda x: (x['duration_ms'] * (1 - x['target'])).expanding().mean().shift()
-    ).reset_index(level=0, drop=True).fillna(df['duration_ms'].mean()).astype(np.float32)
+        lambda x: (x['track_duration_ms'] * (1 - x['target'])).expanding().mean().shift()
+    ).reset_index(level=0, drop=True).fillna(df['track_duration_ms'].mean()).astype(np.float32)
+
+    # Duración promedio de episodios por usuario
+    df['user_avg_podcast_duration_skipped'] = df.groupby('username', observed=True).apply(
+        lambda x: (x['podcast_duration_ms'] * x['target']).expanding().mean().shift()
+    ).reset_index(level=0, drop=True).fillna(df['podcast_duration_ms'].mean()).astype(np.float32)
+
+    df['user_avg_podcast_duration_not_skipped'] = df.groupby('username', observed=True).apply(
+        lambda x: (x['podcast_duration_ms'] * (1 - x['target'])).expanding().mean().shift()
+    ).reset_index(level=0, drop=True).fillna(df['podcast_duration_ms'].mean()).astype(np.float32)
 
     # Preferencias según antigüedad de canción
     age_buckets = {
@@ -524,6 +524,8 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
         'user_skip_rate',
         'user_avg_track_duration_skipped',
         'user_avg_track_duration_not_skipped',
+        'user_avg_podcast_duration_skipped',
+        'user_avg_podcast_duration_not_skipped',
         'user_preference_this_age',
         'user_time_since_last_play',
         'user_artist_weekend_consumed',
