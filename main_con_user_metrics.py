@@ -1,7 +1,7 @@
 import pandas as pd
 import time
 from database_utils import load_competition_datasets, cast_column_types, split_train_test_df,split_x_and_y, processFinalInformation, createNewFeatures, applyHistoricalFeaturesToSet, processTargetAndTestMask, keepImportantColumnsDefault, createNewSetFeatures, simple_clustering
-from base_xgboost import trainXGBoostModelTemporal, backward_feature_selection
+from base_xgboost import trainXGBoostModelTemporal, backward_feature_selection_topN
 import constants as C
 import os
 
@@ -9,9 +9,9 @@ pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
 PORCENTAJE_DATASET_UTILIZADO = 1 # Porcentaje del dataset a utilizar
-MAX_EVALS_BAYESIAN = 7 # Cantidad de iteraciones para la optimización bayesiana
+MAX_EVALS_BAYESIAN = 10 # Cantidad de iteraciones para la optimización bayesiana
 FEATURE_SELECTION_FILE = "resultados/selected_features.csv"
-MIN_FEATURES = 20
+MIN_FEATURES = 15
 
 def main():
     start = time.time()
@@ -47,6 +47,9 @@ def main():
     df_train = df_train_dataset[temporal_train_mask].copy()
     df_val = df_train_dataset[temporal_val_mask].copy()
 
+    print(f"Target distribution in training: {df_train['target'].mean():.4f}")
+    print(f"Target distribution in validation: {df_val['target'].mean():.4f}")
+
     # Ordenar para respetar la secuencia temporal
     df_train = df_train.sort_values(['username', 'ts'])
     df_val = df_val.sort_values(['username', 'ts'])
@@ -65,17 +68,17 @@ def main():
     X_test_to_predict = applyHistoricalFeaturesToSet(X_test_to_predict, df_train)
 
     # ===================================================
-    # 6. Split temporal dentro de 2024 (val/test)
+    # 6. Split final dentro de 2024 (val/test)
     # ===================================================
-    print("Temporal split inside 2024 for validation and test...")
+    print("final split inside 2024 for validation and test...")
 
     val_cutoff = df_val["ts"].quantile(0.9)  # 90% early 2024 as validation
     df_val_real = df_val[df_val["ts"] <= val_cutoff]
     df_test = df_val[df_val["ts"] > val_cutoff]
 
-    print(f"  --> Temporal training set (pre-2024): {df_train.shape[0]} rows")
-    print(f"  --> Temporal validation set (early 2024): {df_val_real.shape[0]} rows")
-    print(f"  --> Temporal test set (late 2024): {df_test.shape[0]} rows")
+    print(f"  --> final training set (pre-2024): {df_train.shape[0]} rows")
+    print(f"  --> final validation set (early 2024): {df_val_real.shape[0]} rows")
+    print(f"  --> final test set (late 2024): {df_test.shape[0]} rows")
 
     # ===================================================
     # 7. Separar X e y
@@ -114,7 +117,7 @@ def main():
     if feature_file is not None and os.path.exists(feature_file):
         selected_features = pd.read_csv(feature_file, header=None).iloc[:, 0].tolist()
     else:
-        history_df, selected_features, best_auc = backward_feature_selection(
+        selected_features = backward_feature_selection_topN(
             X_train_features, y_train,
             X_val_features, y_val,
             min_features=MIN_FEATURES,

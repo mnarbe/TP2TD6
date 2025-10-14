@@ -2,12 +2,14 @@ import constants as C
 
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import KFold, GridSearchCV, KFold, ParameterGrid
 import xgboost as xgb
 from sklearn.metrics import roc_auc_score
 from hyperopt import hp, fmin, tpe, space_eval, STATUS_OK
 from tqdm import tqdm
+
+USES_GPU = False # Colocar en True si tenes una GPU de NVIDIA
+DEVICE = 'cuda' if USES_GPU else 'cpu'
 
 def train_classifier_xgboost(X_train, y_train, params=None):
     """
@@ -16,6 +18,7 @@ def train_classifier_xgboost(X_train, y_train, params=None):
 
     model = xgb.XGBClassifier(objective = 'binary:logistic',
                                 seed = C.RAND_SEED,
+                                device=DEVICE,
                                 eval_metric = 'auc',
                                 enable_categorical=True,
                                 **params)
@@ -30,6 +33,7 @@ def train_classifier_xgboost_val(X_train, y_train, X_val, y_val, params=None):
 
     model = xgb.XGBClassifier(objective = 'binary:logistic',
                                 seed = C.RAND_SEED,
+                                device=DEVICE,
                                 eval_metric = 'auc',
                                 enable_categorical=True,
                                 **params)
@@ -63,6 +67,7 @@ def objective_temporal(params, X_train, y_train, X_val, y_val):
     model = xgb.XGBClassifier(
         objective='binary:logistic',
         seed=C.RAND_SEED,
+        device=DEVICE,
         eval_metric='auc',
         enable_categorical=True,
         **params
@@ -87,7 +92,102 @@ def objective_temporal(params, X_train, y_train, X_val, y_val):
 ########      Feature Selection      ###########
 ################################################
 
-def backward_feature_selection(
+def backward_feature_selection_topN(
+    X_train, y_train,
+    X_val, y_val,
+    min_features=15,
+    topN=30,
+    xgb_params=None,
+    early_stopping_rounds=50,
+    verbose=True,
+    save_path="resultados/topN_features.csv"
+):
+    """
+    Realiza backward feature elimination con XGBoost usando 'gain' como criterio de importancia.
+    Guarda las mejores N combinaciones de features con su AUC y orden de importancia.
+    """
+
+    if xgb_params is None:
+        xgb_params = {
+            "n_estimators": 200,
+            "max_depth": 5,
+            "learning_rate": 0.1,
+            "subsample": 0.8,
+            "colsample_bytree": 0.7,
+            "reg_lambda": 10,
+            "reg_alpha": 3,
+            "min_child_weight": 5
+        }
+
+    features = list(X_train.columns)
+    history = []
+
+    pbar = tqdm(total=len(features) - min_features, disable=not verbose)
+    last_removed = None
+
+    while len(features) >= min_features:
+        # Entrenar modelo
+        model = xgb.XGBClassifier(
+            objective='binary:logistic',
+            seed=C.RAND_SEED_3,
+            device=DEVICE,
+            eval_metric='auc',
+            enable_categorical=True,
+            early_stopping_rounds=early_stopping_rounds,
+            **xgb_params
+        )
+        model.fit(
+            X_train[features], y_train,
+            eval_set=[(X_val[features], y_val)],
+            verbose=False
+        )
+
+        # Importancias
+        booster = model.get_booster()
+        imp = booster.get_score(importance_type="gain")
+        imp_series = pd.Series({f: imp.get(f, 0.0) for f in features}).sort_values(ascending=False)
+
+        # Guardar estado actual
+        history.append({
+            "n_features": len(features),
+            "val_auc": model.best_score,
+            "features": features.copy(),
+            "importances": imp_series.to_dict(),
+            "removed_feature": last_removed
+        })
+
+        # Cortar si llegamos al mínimo de features
+        if len(features) == min_features:
+            break
+
+        # Feature menos importante
+        least_important = imp_series.idxmin()
+
+        # Eliminarla y guardar cuál fue
+        last_removed = least_important
+        features.remove(least_important)
+
+        pbar.update(1)
+
+    pbar.close()
+
+    # Convertir historial a DataFrame
+    history_df = pd.DataFrame(history)
+
+    # Tomar las top N combinaciones según AUC
+    topN_df = history_df.sort_values("val_auc", ascending=False).head(topN).reset_index(drop=True)
+
+    if save_path is not None:
+        topN_df.to_csv(save_path, index=False)
+        if verbose:
+            print(f"✅ Top {topN} combinaciones guardadas en: {save_path}")
+
+    best_row = topN_df.iloc[0]
+    best_features = best_row['features']
+
+    return best_features
+
+def backward_feature_selection_deprecated(
     X_train, y_train,
     X_val, y_val,
     min_features=20,
@@ -123,6 +223,7 @@ def backward_feature_selection(
         model = xgb.XGBClassifier(
             objective='binary:logistic',
             seed=C.RAND_SEED_3,
+            device=DEVICE,
             eval_metric='auc',
             enable_categorical=True,
             early_stopping_rounds=early_stopping_rounds,
@@ -228,7 +329,7 @@ def trainXGBoostModel_v2(X_train, y_train, fold_splits, optimization_evals):
     base_estimator = xgb.XGBClassifier(
         objective="binary:logistic",
         eval_metric="auc",
-        tree_method="hist",
+        device=DEVICE,
         enable_categorical=True,
         random_state=C.RAND_SEED,
         n_estimators=300,
