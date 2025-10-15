@@ -1,7 +1,7 @@
 import pandas as pd
 import time
 from database_utils import load_competition_datasets, cast_column_types, split_train_test_df,split_x_and_y, processFinalInformation, createNewFeatures, applyHistoricalFeaturesToSet, processTargetAndTestMask, keepImportantColumnsDefault, createNewSetFeatures, simple_clustering
-from base_xgboost import trainXGBoostModelTemporal, backward_feature_selection_topN
+from base_xgboost import trainXGBoostModelTemporalPorUser, backward_feature_selection_por_user_topN
 import constants as C
 import os
 import ast
@@ -141,7 +141,7 @@ def main():
         ]
 
     else:
-        selected_features_list = backward_feature_selection_topN(
+        selected_features_list = backward_feature_selection_por_user_topN(
             X_train_features, y_train,
             X_val_features, y_val,
             min_features=MIN_FEATURES,
@@ -163,7 +163,7 @@ def main():
         # ===================================================
 
         # Train model with temporal validation using the NEW function
-        model = trainXGBoostModelTemporal(
+        model = trainXGBoostModelTemporalPorUser(
             X_train_selected, y_train, 
             X_val_selected, y_val, 
             MAX_EVALS_BAYESIAN
