@@ -1,20 +1,19 @@
 import pandas as pd
 import time
-from database_utils import load_competition_datasets, cast_column_types, split_train_test_df,split_x_and_y, processFinalInformation, createNewFeatures, applyHistoricalFeaturesToSet, processTargetAndTestMask, keepImportantColumnsDefault, createNewSetFeatures, simple_clustering
+from database_utils import *
 from base_xgboost import trainXGBoostModelTemporal, backward_feature_selection_topN
 import constants as C
 import os
-import ast
 
 pd.set_option("display.max_columns", None)
 
 # Adjust this path if needed
 PORCENTAJE_DATASET_UTILIZADO = 1 # Porcentaje del dataset a utilizar
-MAX_EVALS_BAYESIAN = 8 # Cantidad de iteraciones para la optimización bayesiana
+MAX_EVALS_BAYESIAN = 1 # Cantidad de iteraciones para la optimización bayesiana
 FEATURE_SELECTION_FILE = "resultados/selected_features.csv"
 FEATURE_LIST_SELECTION_FILE = "resultados/selected_features_list.csv"
-MIN_FEATURES = 15
-TOP_N_USED = 8
+MIN_FEATURES = 18
+TOP_N_USED = 5
 
 def main():
     start = time.time()
@@ -30,48 +29,43 @@ def main():
     df = createNewFeatures(df)
     df = df.sort_values(["obs_id"])
     df = processTargetAndTestMask(df)
-    df = keepImportantColumnsDefault(df)
     
     # ===========================
-    # 2. Train/Test split (con is_test)
+    # 2. Creo counting features (primero spliteo el dataset temporalmente para obtener train set)
     # ===========================
+    
+    # Separo el train del valid y del test
+    df_train_dataset, _ = split_train_test_df(df)
+    temporal_train_mask = df_train_dataset["year_ts"] < 2024
+    df_train = df_train_dataset[temporal_train_mask].copy()
+
+    # Creo counting features para todo el dataset (No hay leakage porque se ordena temporalmente y los bins se calculan con el train set)
+    df = createNewCountingFeatures(df, df_train)
+
+    # ===========================
+    # 3. Con el nuevo dataset, spliteo test y valid
+    # ===========================
+
+    # Vuelvo a splitear el dataset con las nuevas columnas de counting
     df_train_dataset, X_test_to_predict = split_train_test_df(df)
     X_test_to_predict = X_test_to_predict.drop(columns=["target", "is_test"])
-    test_obs_ids = X_test_to_predict["obs_id"].copy()
-    
-    # ===========================
-    # 3. Temporal split en train
-    # ===========================
+
+    # Vuelvo a splitear train y valid
     print("Performing temporal split...")
-    print(f"Available years in training data: {sorted(df_train_dataset['year_ts'].unique())}")
-    
     temporal_train_mask = df_train_dataset["year_ts"] < 2024
     temporal_val_mask = df_train_dataset["year_ts"] == 2024
     df_train = df_train_dataset[temporal_train_mask].copy()
     df_val = df_train_dataset[temporal_val_mask].copy()
 
-    print(f"Target distribution in training: {df_train['target'].mean():.4f}")
-    print(f"Target distribution in validation: {df_val['target'].mean():.4f}")
-
     # Ordenar para respetar la secuencia temporal
     df_train = df_train.sort_values(['username', 'ts'])
     df_val = df_val.sort_values(['username', 'ts'])
+    X_test_to_predict = X_test_to_predict.sort_values(['username', 'ts'])
+
+    test_obs_ids = X_test_to_predict["obs_id"].copy()
 
     # ===================================================
-    # 4. Crear features históricas SOLO en train (sin leakage)
-    # ===================================================
-    print("Creating new features for train set...")
-    df_train = createNewSetFeatures(df_train)
-
-    # ===================================================
-    # 5. Aplicar features históricas a valid/test
-    # ===================================================
-    print("Applying new features for valid and test set...")
-    df_val = applyHistoricalFeaturesToSet(df_val, df_train)
-    X_test_to_predict = applyHistoricalFeaturesToSet(X_test_to_predict, df_train)
-
-    # ===================================================
-    # 6. Split final dentro de 2024 (val/test)
+    # 4. Split final dentro de 2024 (val/test)
     # ===================================================
     print("final split inside 2024 for validation and test...")
 
@@ -83,7 +77,26 @@ def main():
     print(f"  --> final validation set (early 2024): {df_val_real.shape[0]} rows")
     print(f"  --> final test set (late 2024): {df_test.shape[0]} rows")
 
+    # # ===================================================
+    # # 5. Crear features históricas SOLO en train (sin leakage)
+    # # ===================================================
+    # print("Creating new features for train set...")
+    # df_train = createNewSetFeatures(df_train)
 
+    # # ===================================================
+    # # 6. Aplicar features históricas a valid/test
+    # # ===================================================
+    # print("Applying new features for valid and test set...")
+    # df_val_real = applyHistoricalFeaturesToSet(df_val, df_train)
+    # df_test = applyHistoricalFeaturesToSet(df_test, df_train)
+    # X_test_to_predict = applyHistoricalFeaturesToSet(X_test_to_predict, df_train)
+    
+    # Now keep only the important columns on all sets
+    df_train = keepImportantColumnsDefault(df_train)
+    df_val_real = keepImportantColumnsDefault(df_val)
+    df_test = keepImportantColumnsDefault(df_test)
+    X_test_to_predict = keepImportantColumnsDefault(X_test_to_predict)
+    
     # ===================================================
     # 7. Separar X e y
     # ===================================================
@@ -98,17 +111,24 @@ def main():
     # ===================================================
     # 8. Drop columnas auxiliares
     # ===================================================
-    X_train_features = X_train.drop(columns=["obs_id", "year_ts", "ts", "spotify_track_uri"])
-    X_val_features = X_val.drop(columns=["obs_id", "year_ts", "ts", "spotify_track_uri"])
-    X_test_features = X_test.drop(columns=["obs_id", "year_ts", "ts", "spotify_track_uri"])
-    X_test_to_predict_features = X_test_to_predict.drop(columns=["obs_id", "year_ts", "ts", "spotify_track_uri"])
+    # Columnas base a eliminar
+    base_cols_to_drop = ["obs_id", "year_ts", "ts", "spotify_track_uri", "date", "hour"]
+    
+    X_train_features = X_train.drop(columns=base_cols_to_drop, errors='ignore')
+    X_val_features = X_val.drop(columns=base_cols_to_drop, errors='ignore')
+    X_test_features = X_test.drop(columns=base_cols_to_drop, errors='ignore')
+    X_test_to_predict_features = X_test_to_predict.drop(columns=base_cols_to_drop, errors='ignore')
 
-    # Drop columnas de skip rate
-    cols_to_drop = [col for col in X_train.columns if "skip" in col]
-    X_train_features = X_train_features.drop(columns=cols_to_drop, errors="ignore")
-    X_val_features = X_val_features.drop(columns=cols_to_drop, errors="ignore")
-    X_test_features = X_test_features.drop(columns=cols_to_drop, errors="ignore")
-    X_test_to_predict_features = X_test_to_predict_features.drop(columns=cols_to_drop, errors="ignore")
+    # # Drop columnas de skip rate, pero mantener las de bin counting
+    # whitelist_skip = {
+    #     'user_skip_rate','track_skip_rate','artist_skip_rate',
+    #     'user_hour_skip_rate','user_weekday_skip_rate'
+    # }
+    # cols_to_drop = [col for col in X_train.columns if ("skip" in col and "bin" not in col and col not in whitelist_skip)]
+    # X_train_features = X_train_features.drop(columns=cols_to_drop, errors="ignore")
+    # X_val_features = X_val_features.drop(columns=cols_to_drop, errors="ignore")
+    # X_test_features = X_test_features.drop(columns=cols_to_drop, errors="ignore")
+    # X_test_to_predict_features = X_test_to_predict_features.drop(columns=cols_to_drop, errors="ignore")
 
     # ===================================================
     # 9. Aplicar K-Means

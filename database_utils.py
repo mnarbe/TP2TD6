@@ -189,11 +189,40 @@ def keepImportantColumnsDefault(df):
         "is_podcast", "episode_name", "show_name", "show_publisher", "show_total_episodes", # De podcasts
         "track_duration_ms", "podcast_duration_ms", "explicit", "popularity", # Características de la pista
         "time_since_release", "release_date_year", "release_date_month", "song_age_years", # release date,
-        "genre1", "genre2", "genre3", "user_last_song_different", # genero
-        "has_popular_artist_genre", "has_rare_artist_genre", "is_kids_genre", "is_comedy_genre", "is_spanish", # genero
-        "has_local_genre", "has_latin_genre", "has_low_energy_genre", "has_high_energy_genre", # genero
-        "has_heavy_genre", "has_party_genre", "has_romantic_genre", "has_relaxing_genre", "has_instrumental_genre", # genero
-        "ts", "spotify_track_uri", # Conservar auxiliares para procesamiento futuro
+        "genre1", "genre2", "user_last_song_different", # genre3, # genero
+        # "has_popular_artist_genre", "has_rare_artist_genre", "is_kids_genre", "is_comedy_genre", "is_spanish", # genero
+        # "has_local_genre", "has_latin_genre", "has_low_energy_genre", "has_high_energy_genre", # genero
+        # "has_heavy_genre", "has_party_genre", "has_romantic_genre", "has_relaxing_genre", "has_instrumental_genre", # genero
+
+        # Features de counting
+        # Bins por hora
+        *[f'hour_bin_{i}' for i in range(24)],
+        # Bins por duración
+        *[f'duration_bin_{i}' for i in range(10)],
+        # Bins por popularidad
+        *[f'popularity_bin_{i}' for i in range(5)],
+        # Bins por tiempo entre canciones
+        *[f'time_diff_bin_{i}' for i in range(6)],
+        
+        # Contadores derivados
+        'artist_play_count',
+        # 'genre1_play_count',
+        'user_track_listens_today_count',
+        'user_artist_listens_today_count',
+        # 'daily_songs_bin',
+        'user_session_len_so_far',
+
+        # Contadores derivados agregados
+        # 'user_session_id',
+        # 'time_diff_bin',
+        'songs_count_in_day',
+        'user_time_since_last_same_track',
+        'user_time_since_last_same_artist',
+        'user_time_since_last_play',
+        'user_track_listens_count',
+        
+        # Columnas auxiliares necesarias para procesamiento
+        "ts", "spotify_track_uri"
     ]
 
     # Adding time-based features 
@@ -201,14 +230,14 @@ def keepImportantColumnsDefault(df):
     for field in time_based_fields:
         to_keep.extend([
             "month_played_" + field,
-            "hour_of_day_" + field,
+            # "hour_of_day_" + field,
             "time_of_day_" + field,
             "year_" + field,
             "weekday_" + field,
             "fin_de_semana_" + field,
-            "day_of_year_" + field,
-            "week_of_year_" + field,
-            "day_of_month_" + field
+            # "day_of_year_" + field,
+            # "week_of_year_" + field,
+            # "day_of_month_" + field
         ])
 
     # Keep only existing columns
@@ -226,6 +255,9 @@ def createNewFeatures(df):
     df["release_date"] = pd.to_datetime(df["release_date"], errors="coerce", utc=True)
     df["time_since_release"] = (df["ts"] - df["release_date"]).dt.total_seconds()
     df["time_since_release"] = df["time_since_release"].astype("float32")
+    # Winsorize heavy tails
+    tsr_low, tsr_high = df["time_since_release"].quantile([0.01, 0.99])
+    df["time_since_release"] = df["time_since_release"].clip(lower=tsr_low, upper=tsr_high)
     df["release_date_year"] = df["release_date"].dt.year.astype("UInt16")
     df["release_date_month"] = df["release_date"].dt.month.astype("UInt8")
     current_year = df['ts'].dt.year
@@ -238,6 +270,10 @@ def createNewFeatures(df):
 
     df["track_duration_ms"] = df["duration_ms"].where(df["is_track"] == 1, 0).fillna(0).astype("uint32")
     df["podcast_duration_ms"] = df["duration_ms"].where(df["is_podcast"] == 1, 0).fillna(0).astype("uint64")
+    # Winsorize duration
+    d_low, d_high = df["duration_ms"].quantile([0.01, 0.995])
+    df["track_duration_ms"] = df["track_duration_ms"].clip(lower=d_low, upper=d_high)
+    df["podcast_duration_ms"] = df["podcast_duration_ms"].clip(lower=d_low, upper=d_high)
 
     # Diferencia con la canción anterior escuchada
     df['prev_genre1'] = df.groupby('username', observed=True)['genre1'].shift(1)
@@ -252,6 +288,109 @@ def createNewFeatures(df):
     # others
     df['operative_system'] = df['platform'].apply(get_operative_system).astype('category')
     df['is_mobile'] = df['platform'].isin(['ios', 'android']).astype(np.uint8)
+
+    return df
+
+def createNewCountingFeatures(df, df_train):
+    # ================
+    # Aplica nuevas features de counting a todo el dataset (No genera leakage porque están ordenadas temporalmente)
+    # ================
+
+    # Ordeno temporalmente
+    df = df.sort_values(['ts'])
+    
+    # Extraer hora para bin-counting
+    df['hour'] = df['ts'].dt.hour
+    
+    # 1. Bin-counting por hora del día (24 bins) - ACUMULATIVO
+    print("  --> Calculating bin-counting for hour of day...")
+    for hour in range(24):
+        indicator = (df['hour'] == hour).astype(int)
+        cum_sum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
+        df[f'hour_bin_{hour}'] = cum_sum.astype(np.uint16)
+    
+    # 2. Bin-counting por duración de canciones (10 bins) - ACUMULATIVO
+    print("  --> Calculating bin-counting for track duration...")
+    # Crear bins de duración solo en train (sin mirar el futuro)
+    duration_quantiles = np.unique(df_train['track_duration_ms'].quantile([i/10 for i in range(11)]).values)
+    if len(duration_quantiles) < 2:
+        df['duration_bin'] = 0
+    else:
+        df['duration_bin'] = pd.cut(
+            df['track_duration_ms'],
+            bins=duration_quantiles,
+            labels=False,
+            include_lowest=True,
+            duplicates='drop'
+        )
+    if pd.api.types.is_numeric_dtype(df['duration_bin']):
+        n_duration_bins = int(pd.Series(df['duration_bin']).dropna().max()) + 1 if pd.Series(df['duration_bin']).notna().any() else 1
+        for bin_idx in range(int(n_duration_bins)):
+            indicator = (df['duration_bin'] == bin_idx).astype(int)
+            cum_sum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
+            df[f'duration_bin_{bin_idx}'] = cum_sum.astype(np.uint16)
+    
+    # 3. Bin-counting por popularidad (5 bins) - ACUMULATIVO
+    print("  --> Calculating bin-counting for popularity...")
+    popularity_quantiles = np.unique(df_train['popularity'].quantile([i/5 for i in range(6)]).values)
+    if len(popularity_quantiles) < 2:
+        df['popularity_bin'] = 0
+    else:
+        df['popularity_bin'] = pd.cut(df['popularity'], bins=popularity_quantiles, labels=False, include_lowest=True, duplicates='drop')
+    
+    if pd.api.types.is_numeric_dtype(df['popularity_bin']):
+        n_pop_bins = int(pd.Series(df['popularity_bin']).dropna().max()) + 1 if pd.Series(df['popularity_bin']).notna().any() else 1
+        for bin_idx in range(int(n_pop_bins)):
+            indicator = (df['popularity_bin'] == bin_idx).astype(int)
+            cum_sum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
+            df[f'popularity_bin_{bin_idx}'] = cum_sum.astype(np.uint16)
+
+    # 4. Bin-counting por cantidad de canciones por día (5 bins) - ACUMULATIVO
+    print("  --> Calculating bin-counting for daily songs...")
+    df['date'] = df['ts'].dt.date
+    # Calcular canciones por día HASTA AHORA (histórico)
+    df['songs_count_in_day'] = df.groupby(['username', 'date'], observed=True).cumcount()
+    # Calcular escuchas del mismo track por usuario en el mismo día HASTA AHORA (histórico)
+    df['user_track_listens_today_count'] = df.groupby(['username', 'date', 'spotify_track_uri'], observed=True).cumcount()
+    # Calcular escuchas del mismo artista por usuario en el mismo día HASTA AHORA (histórico)
+    df['user_artist_listens_today_count'] = df.groupby(['username', 'date', 'master_metadata_album_artist_name'], observed=True).cumcount()
+
+    # 5. Bin-counting por tiempo entre reproducciones (6 bins) - ACUMULATIVO
+    print("  --> Calculating bin-counting for time between songs...")
+    df['time_between_songs'] = df.groupby('username', observed=True)['ts'].diff().dt.total_seconds()
+    time_diff_bins = [-np.inf, 60, 300, 900, 1800, 3600, np.inf]
+    df['time_diff_bin'] = pd.cut(df['time_between_songs'], bins=time_diff_bins, labels=False)
+    
+    for bin_idx in range(6):
+        indicator = (df['time_diff_bin'] == bin_idx).astype(int)
+        cum_sum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
+        df[f'time_diff_bin_{bin_idx}'] = cum_sum.astype(np.uint16)
+
+    # Conteo de reproducciones por artista (acumulado)
+    df['artist_play_count'] = df.groupby(['username', 'master_metadata_album_artist_name'], observed=True).cumcount()
+    
+    # Conteo de reproducciones por género (acumulado)
+    df['genre1_play_count'] = df.groupby(['username', 'genre1'], observed=True).cumcount()
+
+    # Recency for same track/artist
+    df['user_time_since_last_same_track'] = df.groupby(['username','spotify_track_uri'], observed=True)['ts'].diff().dt.total_seconds().astype(np.float32)
+    df['user_time_since_last_same_artist'] = df.groupby(['username','master_metadata_album_artist_name'], observed=True)['ts'].diff().dt.total_seconds().astype(np.float32)
+
+    # Último tiempo de reproducción
+    df['user_time_since_last_play'] = df.groupby('username', observed=True)['ts'].diff().dt.total_seconds() / 60
+    df['user_time_since_last_play'] = df['user_time_since_last_play'].astype(np.float32)
+
+    # Session boundaries: large gaps or toggles
+    session_break = (
+        (df['user_time_since_last_play'].fillna(1e9) > 45) |
+        (df['offline'].astype('int8').diff().abs().fillna(0) > 0) |
+        (df['incognito_mode'].astype('int8').diff().abs().fillna(0) > 0)
+    ).astype('int8')
+    df['user_session_id'] = session_break.groupby(df['username'], observed=True).cumsum()
+    df['user_session_len_so_far'] = df.groupby(['username','user_session_id'], observed=True).cumcount().astype(np.uint16)
+
+    # Counts históricos de escuchas
+    df['user_track_listens_count'] = df.groupby(['username', 'spotify_track_uri'], observed=True).cumcount()
 
     return df
 
@@ -386,10 +525,6 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
         lambda x: (x['track_duration_ms'] * x['target']).expanding().mean().shift()
     ).reset_index(level=0, drop=True).fillna(df['track_duration_ms'].mean()).astype(np.float32)
 
-    df['user_avg_track_duration_not_skipped'] = df.groupby('username', observed=True).apply(
-        lambda x: (x['track_duration_ms'] * (1 - x['target'])).expanding().mean().shift()
-    ).reset_index(level=0, drop=True).fillna(df['track_duration_ms'].mean()).astype(np.float32)
-
     # Duración promedio de episodios por usuario
     df['user_avg_podcast_duration_skipped'] = df.groupby('username', observed=True).apply(
         lambda x: (x['podcast_duration_ms'] * x['target']).expanding().mean().shift()
@@ -419,17 +554,9 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
             df.loc[mask, 'user_preference_this_age'] = rate.fillna(global_mean).astype(np.float32)
     df['user_preference_this_age'] = df['user_preference_this_age'].fillna(global_mean)
 
-    # Último tiempo de reproducción
-    df['user_time_since_last_play'] = df.groupby('username', observed=True)['ts'].diff().dt.total_seconds() / 60
-    df['user_time_since_last_play'] = df['user_time_since_last_play'].astype(np.float32)
-
-    # Consumo fin de semana por artista
-    g = df.groupby(['username', 'master_metadata_album_artist_name'], observed=True)['weekday_ts']
-    df['user_artist_weekend_consumed'] = (g.cummax() >= 5).astype(np.uint8)
-
-    # Counts históricos de escuchas
-    df['user_artist_listens_count'] = df.groupby(['username', 'master_metadata_album_artist_name'], observed=True).cumcount()
-    df['user_track_listens_count'] = df.groupby(['username', 'spotify_track_uri'], observed=True).cumcount()
+    df['user_avg_track_duration_not_skipped'] = df.groupby('username', observed=True).apply(
+        lambda x: (x['track_duration_ms'] * (1 - x['target'])).expanding().mean().shift()
+    ).reset_index(level=0, drop=True).fillna(df['track_duration_ms'].mean()).astype(np.float32)
 
     # ================
     # 2 - Por usuario + operative_system
@@ -445,50 +572,9 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
     df = processRate(df, 'user_known_artist_skip_rate', ['username', 'master_metadata_album_artist_name'])
     df = processRate(df, 'user_shuffled_skip_rate', ['username', 'shuffle'])
     df = processRate(df, 'user_offline_skip_rate', ['username', 'offline'])
-
-    # ================
-    # 4 - Por usuario + género / tipo de género --> proporción de skips cuando la variable X es true
-    # ================
-    df = processRate(df, 'user_genre_skip_rate', ['username', 'genre1'])
-    df = processRate(df, 'user_kids_genre_skip_rate', ['username', 'is_kids_genre'])
-    df = processRate(df, 'user_comedy_genre_skip_rate', ['username', 'is_comedy_genre'])
-    df = processRate(df, 'user_spanish_skip_rate', ['username', 'is_spanish'])
-    df = processRate(df, 'user_popular_artist_genre_skip_rate', ['username', 'has_popular_artist_genre'])
-    df = processRate(df, 'user_rare_artist_genre_skip_rate', ['username', 'has_rare_artist_genre'])
-    df = processRate(df, 'user_local_genre_skip_rate', ['username', 'has_local_genre'])
-    df = processRate(df, 'user_latin_genre_skip_rate', ['username', 'has_latin_genre'])
-    df = processRate(df, 'user_low_energy_genre_skip_rate', ['username', 'has_low_energy_genre'])
-    df = processRate(df, 'user_high_energy_genre_skip_rate', ['username', 'has_high_energy_genre'])
-    df = processRate(df, 'user_heavy_genre_skip_rate', ['username', 'has_heavy_genre'])
-    df = processRate(df, 'user_party_genre_skip_rate', ['username', 'has_party_genre'])
-    df = processRate(df, 'user_romantic_genre_skip_rate', ['username', 'has_romantic_genre'])
-    df = processRate(df, 'user_relaxing_genre_skip_rate', ['username', 'has_relaxing_genre'])
-    df = processRate(df, 'user_instrumental_genre_skip_rate', ['username', 'has_instrumental_genre'])
-
-    # ================
-    # 5 - Proporciones escuchadas por usuario --> proporción de canciones escuchadas cuando la variable X es true contra su valor en false
-    # (solo dependen de username)
-    # ================
-    df = processUserPropCategorical(df, 'genre1','genre')
-    cols_to_process = [
-        ('is_kids_genre', 'kids_genre'),
-        ('is_comedy_genre', 'comedy_genre'),
-        ('is_spanish', 'spanish'),
-        ('is_spanish','spanish'),
-        ('has_popular_artist_genre','popular_artist_genre'),
-        ('has_rare_artist_genre','rare_artist_genre'),
-        ('has_local_genre','local_genre'),
-        ('has_latin_genre','latin_genre'),
-        ('has_low_energy_genre','low_energy_genre'),
-        ('has_high_energy_genre','high_energy_genre'),
-        ('has_heavy_genre','heavy_genre'),
-        ('has_party_genre','party_genre'),
-        ('has_romantic_genre','romantic_genre'),
-        ('has_relaxing_genre','relaxing_genre'),
-        ('has_instrumental_genre','instrumental_genre')
-    ]
-
-    df = processUserProp(df, cols_to_process)
+    
+    # Defragment after many column insertions to improve performance
+    df = df.copy()
 
     return df
 
@@ -528,9 +614,15 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
         'user_avg_podcast_duration_not_skipped',
         'user_preference_this_age',
         'user_time_since_last_play',
-        'user_artist_weekend_consumed',
-        'user_artist_listens_count',
+        'user_time_since_last_same_track',
+        'user_time_since_last_same_artist',
         'user_track_listens_count',
+        'artist_play_count',
+        'genre1_play_count',
+        'user_artist_listens_today_count',
+        'user_track_listens_today_count',
+        'user_session_len_so_far',
+        
     ]
     df_target = df_target.merge(
         last_by_group(['username'], user_cols),
@@ -564,60 +656,7 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
             on=group_cols, how='left'
         )
 
-    # ================
-    # 4️⃣ Por usuario + género / tipo de género
-    # ================
-    genre_groups = {
-        'user_genre_skip_rate': ['username', 'genre1'],
-        'user_kids_genre_skip_rate': ['username', 'is_kids_genre'],
-        'user_comedy_genre_skip_rate': ['username', 'is_comedy_genre'],
-        'user_spanish_skip_rate': ['username', 'is_spanish'],
-        'user_popular_artist_genre_skip_rate': ['username', 'has_popular_artist_genre'],
-        'user_rare_artist_genre_skip_rate': ['username', 'has_rare_artist_genre'],
-        'user_local_genre_skip_rate': ['username', 'has_local_genre'],
-        'user_latin_genre_skip_rate': ['username', 'has_latin_genre'],
-        'user_low_energy_genre_skip_rate': ['username', 'has_low_energy_genre'],
-        'user_high_energy_genre_skip_rate': ['username', 'has_high_energy_genre'],
-        'user_heavy_genre_skip_rate': ['username', 'has_heavy_genre'],
-        'user_party_genre_skip_rate': ['username', 'has_party_genre'],
-        'user_romantic_genre_skip_rate': ['username', 'has_romantic_genre'],
-        'user_relaxing_genre_skip_rate': ['username', 'has_relaxing_genre'],
-        'user_instrumental_genre_skip_rate': ['username', 'has_instrumental_genre'],
-        'user_genre_listened_prop': ['username', 'genre1']
-    }
-
-    for feat, group_cols in genre_groups.items():
-        df_target = df_target.merge(
-            last_by_group(group_cols, [feat]),
-            on=group_cols, how='left'
-        )
-
-    # ================
-    # 5️⃣ Proporciones escuchadas por usuario
-    # (solo dependen de username)
-    # ================
-    listened_cols = [
-        'user_kids_genre_listened_prop',
-        'user_comedy_genre_listened_prop',
-        'user_spanish_listened_prop',
-        'user_popular_artist_genre_listened_prop',
-        'user_rare_artist_genre_listened_prop',
-        'user_local_genre_listened_prop',
-        'user_latin_genre_listened_prop',
-        'user_low_energy_genre_listened_prop',
-        'user_high_energy_genre_listened_prop',
-        'user_heavy_genre_listened_prop',
-        'user_party_genre_listened_prop',
-        'user_romantic_genre_listened_prop',
-        'user_relaxing_genre_listened_prop',
-        'user_instrumental_genre_listened_prop',
-    ]
-
-    df_target = df_target.merge(
-        last_by_group(['username'], listened_cols),
-        on=['username'], how='left'
-    )
-
+    
     return df_target
 
 def applyHistoricalNonUserFeaturesToSet(df_target, df_train):
@@ -664,7 +703,7 @@ def createNewTimeBasedFeatures(df, field):
 
 def createNewTimeBasedFeaturesSimple(df, field):
     df["month_played_" + field] = df[field].dt.month.astype("uint8")
-    df["hour_of_day_" + field] = df[field].dt.month.astype("uint8")
+    df["hour_of_day_" + field] = df[field].dt.hour.astype("uint8")
     df["time_of_day_" + field] = df[field].dt.hour.apply(momento_del_dia).astype("category")
     df["year_" + field] = df[field].dt.year.astype("uint16")
     df["day_of_year_" + field] = df[field].dt.dayofyear.astype("uint16")

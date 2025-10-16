@@ -48,20 +48,6 @@ def train_classifier_xgboost_val(X_train, y_train, X_val, y_val, params=None):
 ########      Funciones Objetivo      ##########
 ################################################
 
-def objective_KFold(params, X_train, y_train, fold_splits):
-    """
-    CV interna sobre el train inicial (sin agrupar por usuario).
-    """
-    kf = KFold(n_splits=fold_splits, shuffle=True, random_state=C.RAND_SEED)
-    aucs = []
-    for tr_idx, va_idx in kf.split(X_train, y_train):
-        X_tr, X_va = X_train.iloc[tr_idx], X_train.iloc[va_idx]
-        y_tr, y_va = y_train.iloc[tr_idx], y_train.iloc[va_idx]
-        model = train_classifier_xgboost_val(X_tr, y_tr, X_va, y_va, params)
-        preds = model.predict_proba(X_va)[:, 1]
-        aucs.append(roc_auc_score(y_va, preds))
-    return {"loss": 1 - np.mean(aucs), "status": STATUS_OK}
-
 def objective_temporal(params, X_train, y_train, X_val, y_val):
     """Objective function for hyperopt using temporal validation."""
     model = xgb.XGBClassifier(
@@ -88,58 +74,6 @@ def objective_temporal(params, X_train, y_train, X_val, y_val):
     
     return {"loss": 1 - auc, "status": STATUS_OK}
 
-def objective_temporal_por_usuario(params, X_train, y_train, X_val, y_val,
-                                   username_col="username", n_splits=5):
-    """
-    Validación cruzada por usuario sobre un split temporal fijo.
-    En cada fold se entrena sólo con los usuarios que aparecen en ese fold de validación.
-    Esto simula el escenario productivo donde predecimos para un conjunto fijo de usuarios.
-    """
-    usuarios_unicos = X_val[username_col].unique()
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=C.RAND_SEED_2)
-
-    auc_scores = []
-
-    for fold, (train_users_idx, val_users_idx) in enumerate(kf.split(usuarios_unicos)):
-        val_users_fold = usuarios_unicos[val_users_idx]
-
-        # --- Train: sólo historial de los usuarios que aparecen en este fold de validación ---
-        train_mask_users = X_train[username_col].isin(val_users_fold)
-        X_train_fold = X_train[train_mask_users]
-        y_train_fold = y_train[train_mask_users]
-
-        # --- Valid: datos futuros de los mismos usuarios ---
-        val_mask = X_val[username_col].isin(val_users_fold)
-        X_val_fold = X_val[val_mask]
-        y_val_fold = y_val[val_mask]
-
-        # Entrenar modelo
-        model = xgb.XGBClassifier(
-            objective='binary:logistic',
-            seed=C.RAND_SEED,
-            device=DEVICE,
-            eval_metric='auc',
-            enable_categorical=True,
-            **params
-        )
-
-        model.fit(
-            X_train_fold, y_train_fold,
-            eval_set=[(X_val_fold, y_val_fold)],
-            verbose=False
-        )
-
-        preds = model.predict_proba(X_val_fold)[:, 1]
-        auc = roc_auc_score(y_val_fold, preds)
-        auc_scores.append(auc)
-
-        print(f"Fold {fold+1}/{n_splits} - AUC: {auc:.5f} - train rows: {len(X_train_fold)} - val rows: {len(X_val_fold)}")
-
-    mean_auc = np.mean(auc_scores)
-    print(f"--> AUC promedio (entrenando con los mismos usuarios del fold): {mean_auc:.5f}")
-
-    return {"loss": 1 - mean_auc, "status": STATUS_OK}
-
 ################################################
 ########      Feature Selection      ###########
 ################################################
@@ -151,7 +85,7 @@ def backward_feature_selection_topN(
     topN=30,
     topN_used=8,
     xgb_params=None,
-    early_stopping_rounds=50,
+    early_stopping_rounds=30,
     verbose=True,
     save_path="resultados/topN_features.csv"
 ):
@@ -162,7 +96,7 @@ def backward_feature_selection_topN(
 
     if xgb_params is None:
         xgb_params = {
-            "n_estimators": 220,
+            "n_estimators": 180,
             "max_depth": 5,
             "learning_rate": 0.08,
             "subsample": 0.8,
@@ -233,7 +167,7 @@ def backward_feature_selection_topN(
     if save_path is not None:
         topN_df.to_csv(save_path, index=False)
         if verbose:
-            print(f"✅ Top {topN} combinaciones guardadas en: {save_path}")
+            print(f" Top {topN} combinaciones guardadas en: {save_path}")
 
     best_rows = topN_df.head(topN_used)
     best_features_list = best_rows['features'].tolist()
@@ -299,7 +233,7 @@ def backward_feature_selection_por_user_topN(
         })
 
         if verbose:
-            print(f"✅ Fold {fold+1}: train={len(X_train_fold)}, val={len(X_val_fold)}, users={len(val_users_fold)}")
+            print(f" Fold {fold+1}: train={len(X_train_fold)}, val={len(X_val_fold)}, users={len(val_users_fold)}")
 
     # --- 2️⃣ Backward loop ---
     features = list(X_train.columns)
@@ -405,7 +339,7 @@ def backward_feature_selection_por_user_topN(
     if save_path is not None:
         topN_df.to_csv(save_path, index=False)
         if verbose:
-            print(f"✅ Top {topN} combinaciones guardadas en: {save_path}")
+            print(f" Top {topN} combinaciones guardadas en: {save_path}")
 
     best_rows = topN_df.head(topN_used)
     best_features_list = best_rows['features'].tolist()
@@ -581,68 +515,5 @@ def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
     # Train final model with best parameters on all available training data
     print("\nTraining final model with best parameters...")
     final_model = train_classifier_xgboost(X_train, y_train, best_params)
-    
-    return final_model
-
-def trainXGBoostModelTemporalPorUser(X_train, y_train, X_val, y_val, max_evals):
-    """
-    Train XGBoost model using temporal validation (user cross-validation).
-    Uses pre-2024 data for training and 2024 data for validation.
-    
-    Args:
-        X_train: Training features (pre-2024)
-        y_train: Training target (pre-2024)  
-        X_val: Validation features (2024)
-        y_val: Validation target (2024)
-        max_evals: Number of hyperparameter evaluations
-    
-    Returns:
-        Trained XGBoost model
-    """
-    
-    print("=== Training XGBoost with Temporal Validation ===")
-    
-    # Define hyperparameter space
-    space = {
-        'max_depth': hp.uniformint('max_depth', 3, 8),
-        'gamma': hp.uniform('gamma', 0, 4),
-        'learning_rate': hp.loguniform('learning_rate', np.log(0.01), np.log(0.1)),
-        'reg_lambda': hp.loguniform('reg_lambda', np.log(0.01), np.log(10)),
-        'reg_alpha':  hp.loguniform('reg_alpha',  np.log(0.01), np.log(10)),
-        'subsample': hp.uniform('subsample', 0.6, 1),
-        'colsample_bytree': hp.uniform('colsample_bytree', 0.5, 0.8),
-        'colsample_bylevel': 0.7,
-        'n_estimators': hp.uniformint('n_estimators', 200, 600),
-        'min_child_weight': hp.uniformint('min_child_weight', 10, 80)
-    }
-    
-    # Run hyperparameter optimization
-    print(f"Starting hyperparameter optimization with {max_evals} evaluations...")
-    best = fmin(
-        fn=lambda params: objective_temporal_por_usuario(params, X_train, y_train, X_val, y_val),
-        space=space,
-        algo=tpe.suggest,
-        max_evals=max_evals,
-        rstate=np.random.default_rng(C.RAND_SEED_2) if hasattr(C, 'RAND_SEED_2') else np.random.default_rng(42),
-        verbose=False
-    )
-    
-    # Get best parameters
-    best_params = space_eval(space, best)
-    print("\nBest hyperparameters found:")
-    for key, value in best_params.items():
-        print(f"  {key}: {value}")
-
-    # Convert to series
-    y_train = pd.Series(y_train)
-    y_val = pd.Series(y_val)
-
-    # Use all data to train
-    X_train_final = pd.concat([X_train, X_val], axis=0)
-    y_train_final = pd.concat([y_train, y_val], axis=0)
-    
-    # Train final model with best parameters on all available training data
-    print("\nTraining final model with best parameters and all data...")
-    final_model = train_classifier_xgboost(X_train_final, y_train_final, best_params)
     
     return final_model
