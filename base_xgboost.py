@@ -25,24 +25,6 @@ def train_classifier_xgboost(X_train, y_train, params=None):
     model.fit(X_train, y_train)
     return model
 
-def train_classifier_xgboost_val(X_train, y_train, X_val, y_val, params=None):
-    """
-    Train a Classifier 
-    """
-
-    model = xgb.XGBClassifier(objective = 'binary:logistic',
-                                seed = C.RAND_SEED,
-                                device=DEVICE,
-                                eval_metric = 'auc',
-                                enable_categorical=True,
-                                **params)
-
-    model.fit(
-        X_train, y_train,
-        eval_set=[(X_val, y_val)]
-    )
-    return model
-
 ################################################
 ########      Funciones Objetivo      ##########
 ################################################
@@ -174,10 +156,9 @@ def backward_feature_selection_topN(
     return best_features_list
 
 ################################################
-#########      Modelos XGBoost      ############
+#########       Modelo XGBoost      ############
 ################################################
 
-# Para validation 2024 y train pre-2024
 def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
     """
     Train XGBoost model using temporal validation (no cross-validation).

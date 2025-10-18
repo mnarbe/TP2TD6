@@ -7,6 +7,11 @@ import numpy as np
 import constants as C
 import json
 
+
+#####################################################################
+#   CARGA DEL DATASET, SPLITS Y PROCESADO FINAL POST-ENTRENAMIENTO  #
+#####################################################################
+
 # Carga del dataset
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
     """
@@ -114,9 +119,10 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
     preds_df.to_csv(filename, index=False, sep=",")
     print(f"  --> Predictions written to '{filename}'")
 
-#######################
-# PRE PROCESAMIENTO
-#######################
+
+#####################################################################
+#                         PRE PROCESAMIENTO                         #
+#####################################################################
 
 def cast_column_types(df):
     """
@@ -243,9 +249,10 @@ def keepImportantColumnsDefault(df):
     # Keep only existing columns
     return df[[col for col in to_keep if col in df.columns]]
 
-#######################
-# FEATURE ENGINEERING
-#######################
+
+#####################################################################
+#                        FEATURE ENGINEERING                        #
+#####################################################################
 
 def createNewFeatures(df):
     # Add time-based features on timestamp
@@ -632,9 +639,31 @@ def applyHistoricalNonUserFeaturesToSet(df_target, df_train):
     return df_target
 
 
-#######################
-# MÉTODOS AUXILIARES
-#######################
+#####################################################################
+#                        CLUSTERING K-MEANS                         #
+#####################################################################
+
+def simple_clustering(df, kmeans_model=None, n_clusters=3):
+    """Versión corregida que permite usar un modelo existente o entrenar uno nuevo"""
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    numeric_cols = [col for col in numeric_cols if col not in ['obs_id', 'year_ts', 'target']]
+    
+    X_numeric = df[numeric_cols].fillna(0)
+    
+    if kmeans_model is None:
+        # Entrenar nuevo modelo (solo para train)
+        kmeans_model = KMeans(n_clusters=n_clusters, random_state=C.RAND_SEED, n_init=20)
+        df['cluster'] = kmeans_model.fit_predict(X_numeric).astype('int')
+    else:
+        # Usar modelo existente (para validation/test)
+        df['cluster'] = kmeans_model.predict(X_numeric).astype('int')
+    
+    return df, kmeans_model
+
+
+#####################################################################
+#          MÉTODOS AUXILIARES DE PROCESAMIENTO DE DATOS             #
+#####################################################################
 
 def createNewTimeBasedFeatures(df, field):
     df["month_played_" + field] = df[field].dt.month.astype("uint8")
@@ -675,8 +704,6 @@ def momento_del_dia(hora):
 def es_finde(dia):
     return dia.weekday() >= 5
 
-import numpy as np
-
 def get_operative_system(p):
     if pd.isna(p):
         return np.nan
@@ -701,21 +728,3 @@ def get_operative_system(p):
         return 'linux'
     else:
         return 'other'
-
-
-def simple_clustering(df, kmeans_model=None, n_clusters=3):
-    """Versión corregida que permite usar un modelo existente o entrenar uno nuevo"""
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    numeric_cols = [col for col in numeric_cols if col not in ['obs_id', 'year_ts', 'target']]
-    
-    X_numeric = df[numeric_cols].fillna(0)
-    
-    if kmeans_model is None:
-        # Entrenar nuevo modelo (solo para train)
-        kmeans_model = KMeans(n_clusters=n_clusters, random_state=C.RAND_SEED, n_init=20)
-        df['cluster'] = kmeans_model.fit_predict(X_numeric).astype('int')
-    else:
-        # Usar modelo existente (para validation/test)
-        df['cluster'] = kmeans_model.predict(X_numeric).astype('int')
-    
-    return df, kmeans_model
