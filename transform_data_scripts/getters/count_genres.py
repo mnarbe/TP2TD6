@@ -35,7 +35,7 @@ def process(csv_path, output_path):
     genre_counts.to_csv(output_path, index=False, encoding="utf-8")
 
     # Mostrar resumen
-    print(f"✅ Se encontraron {len(genre_counts)} géneros únicos.")
+    print(f"Se encontraron {len(genre_counts)} géneros únicos.")
     print("🎧 Top 20 géneros más frecuentes:\n")
     print(genre_counts.head(20).to_string(index=False))
 

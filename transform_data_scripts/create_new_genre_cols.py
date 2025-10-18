@@ -21,9 +21,8 @@
 # has_relaxing_genre: alguno de los 3 géneros es relajante. chillwave, ambient, lo-fi, lounge, easy listening, smooth jazz, etc.
 # has_instrumental_genre: alguno de los tres generos es instrumental. classical, jazz, soundtrack, instrumental, ambient, etc.
 
-# Calcular métricas por user y agregar columnas sobre esas variables
+# Calcular métricas por user y agregar columnas sobre esas variables:
 
-# Ej:
 # user_likes_this_genre: proporción de canciones escuchadas por el usuario con alguno de los géneros actuales.
 # user_rarely_listens_this_genre: si el género actual está fuera de su top N géneros más reproducidos.
 # genre_novelty: qué tan distinto es el género actual respecto al historial (diversidad o exploración).
@@ -149,4 +148,4 @@ df["has_instrumental_genre"] = df["all_genres"].apply(lambda g: has_any(g, instr
 df.drop(columns=["all_genres"], inplace=True)
 df.to_csv("../merged_test_data_new.csv", index=False)
 
-print("✅ Nuevas columnas agregadas y archivo guardado como 'merged_test_data_new.csv'")
+print("Nuevas columnas agregadas y archivo guardado como 'merged_test_data_new.csv'")

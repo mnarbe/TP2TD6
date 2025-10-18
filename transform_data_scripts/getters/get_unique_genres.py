@@ -22,4 +22,4 @@ with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
     for genre in sorted_genres:
         f.write(genre + "\n")
 
-print(f"✅ {len(sorted_genres)} géneros únicos guardados en {OUTPUT_FILE}")
+print(f"{len(sorted_genres)} géneros únicos guardados en {OUTPUT_FILE}")

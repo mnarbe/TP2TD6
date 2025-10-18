@@ -34,7 +34,7 @@ def get_new_token():
         token_info = r.json()
         TOKEN = token_info["access_token"]
         TOKEN_EXPIRES_AT = time.time() + token_info["expires_in"]
-        print(f"✅ Nuevo token obtenido (expira en {token_info['expires_in']/60:.1f} min)")
+        print(f"Nuevo token obtenido (expira en {token_info['expires_in']/60:.1f} min)")
     else:
         raise Exception(f"Error obteniendo token: {r.status_code} {r.text}")
 
@@ -74,10 +74,10 @@ def get_artists_genres_batch(artist_ids):
                 break
             elif r.status_code == 429:
                 retry_after = int(r.headers.get("Retry-After", 5))
-                print(f"⚠️ Rate limit alcanzado. Esperando {retry_after}s...")
+                print(f"Rate limit alcanzado. Esperando {retry_after}s...")
                 time.sleep(retry_after)
             else:
-                print(f"⚠️ Error {r.status_code} batch {i}-{i+BATCH_SIZE}")
+                print(f"Error {r.status_code} batch {i}-{i+BATCH_SIZE}")
                 for artist_id in batch:
                     all_genres[artist_id] = []
                 break
@@ -90,7 +90,7 @@ def get_artists_genres_batch(artist_ids):
 # ==========================
 def enrich_tracks_with_genres(folder_path, artist_genres_map):
     files = [f for f in os.listdir(folder_path) if f.endswith(".json") and "episode" not in f]
-    print(f"🔍 Enriqueciendo {len(files)} tracks...")
+    print(f"Enriqueciendo {len(files)} tracks...")
 
     for file in files:
         filepath = os.path.join(folder_path, file)
@@ -126,7 +126,7 @@ def main():
     # Obtener todos los artistas
     # --------------------------
     if not artist_ids_cache:
-        print("🔍 Escaneando archivos para obtener artist_ids...")
+        print("Escaneando archivos para obtener artist_ids...")
         artist_ids = set()
         files = [f for f in os.listdir(FOLDER_PATH) if f.endswith(".json") and "episode" not in f]
         for file in files:
@@ -136,16 +136,16 @@ def main():
             if track.get("artists"):
                 artist_ids.add(track["artists"][0]["id"])
         save_json(ARTIST_IDS_FILE, list(artist_ids))
-        print(f"💾 Guardados {len(artist_ids)} artist_ids en {ARTIST_IDS_FILE}")
+        print(f"Guardados {len(artist_ids)} artist_ids en {ARTIST_IDS_FILE}")
     else:
         artist_ids = artist_ids_cache
-        print(f"📂 Cargados {len(artist_ids)} artist_ids desde cache.")
+        print(f"Cargados {len(artist_ids)} artist_ids desde cache.")
 
     # --------------------------
     # Filtrar los que faltan
     # --------------------------
     # artist_ids_to_fetch = [a for a in artist_ids if a not in artist_genres_map]
-    # print(f"🎯 {len(artist_ids_to_fetch)} artistas sin géneros conocidos.")
+    # print(f"{len(artist_ids_to_fetch)} artistas sin géneros conocidos.")
 
     # # --------------------------
     # # Obtener géneros
@@ -154,7 +154,7 @@ def main():
     #     new_artist_genres = get_artists_genres_batch(artist_ids_to_fetch)
     #     artist_genres_map.update(new_artist_genres)
     #     save_json(ARTIST_GENRES_FILE, artist_genres_map)
-    #     print(f"✅ Guardado {ARTIST_GENRES_FILE} con {len(artist_genres_map)} artistas.")
+    #     print(f"Guardado {ARTIST_GENRES_FILE} con {len(artist_genres_map)} artistas.")
 
     # --------------------------
     # Enriquecer tracks (opcional)
@@ -162,7 +162,7 @@ def main():
     # Podés comentar esta línea si querés hacerlo después
     enrich_tracks_with_genres(FOLDER_PATH, artist_genres_map)
 
-    print("✅ Proceso completado.")
+    print("Proceso completado.")
 
 if __name__ == "__main__":
     main()
