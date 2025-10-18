@@ -243,7 +243,9 @@ def keepImportantColumnsDefault(df):
     # Keep only existing columns
     return df[[col for col in to_keep if col in df.columns]]
 
+#######################
 # FEATURE ENGINEERING
+#######################
 
 def createNewFeatures(df):
     # Add time-based features on timestamp
@@ -294,6 +296,7 @@ def createNewFeatures(df):
 def createNewCountingFeatures(df, df_train):
     # ================
     # Aplica nuevas features de counting a todo el dataset (No genera leakage porque están ordenadas temporalmente)
+    # Los cortes de los bins se calculan con datos de train para no filtrar información
     # ================
 
     # Ordeno temporalmente
@@ -366,8 +369,15 @@ def createNewCountingFeatures(df, df_train):
         cum_sum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
         df[f'time_diff_bin_{bin_idx}'] = cum_sum.astype(np.uint16)
 
+    # Último tiempo de reproducción
+    df['user_time_since_last_play'] = df.groupby('username', observed=True)['ts'].diff().dt.total_seconds() / 60
+    df['user_time_since_last_play'] = df['user_time_since_last_play'].astype(np.float32)
+
     # Conteo de reproducciones por artista (acumulado)
     df['artist_play_count'] = df.groupby(['username', 'master_metadata_album_artist_name'], observed=True).cumcount()
+
+    # Counts históricos de escuchas (acumulado)
+    df['user_track_listens_count'] = df.groupby(['username', 'spotify_track_uri'], observed=True).cumcount()
     
     # Conteo de reproducciones por género (acumulado)
     df['genre1_play_count'] = df.groupby(['username', 'genre1'], observed=True).cumcount()
@@ -375,10 +385,6 @@ def createNewCountingFeatures(df, df_train):
     # Recency for same track/artist
     df['user_time_since_last_same_track'] = df.groupby(['username','spotify_track_uri'], observed=True)['ts'].diff().dt.total_seconds().astype(np.float32)
     df['user_time_since_last_same_artist'] = df.groupby(['username','master_metadata_album_artist_name'], observed=True)['ts'].diff().dt.total_seconds().astype(np.float32)
-
-    # Último tiempo de reproducción
-    df['user_time_since_last_play'] = df.groupby('username', observed=True)['ts'].diff().dt.total_seconds() / 60
-    df['user_time_since_last_play'] = df['user_time_since_last_play'].astype(np.float32)
 
     # Session boundaries: large gaps or toggles
     session_break = (
@@ -388,9 +394,6 @@ def createNewCountingFeatures(df, df_train):
     ).astype('int8')
     df['user_session_id'] = session_break.groupby(df['username'], observed=True).cumsum()
     df['user_session_len_so_far'] = df.groupby(['username','user_session_id'], observed=True).cumcount().astype(np.uint16)
-
-    # Counts históricos de escuchas
-    df['user_track_listens_count'] = df.groupby(['username', 'spotify_track_uri'], observed=True).cumcount()
 
     return df
 
@@ -456,56 +459,6 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
 
         return df
     
-    def processUserProp(df, col_list):
-        """
-        Calcula la proporción histórica de columnas True/False por usuario,
-        hasta antes de la fila actual. Devuelve el DataFrame con todas las columnas añadidas.
-        
-        col_list: lista de tuplas (col, name) donde col es la columna original y name es el sufijo.
-        """
-        df = df.copy()
-        new_cols = {}
-
-        for col, name in col_list:
-            col_val = df[col].astype(float)
-            cum_sum = df.groupby('username', observed=True)[col].cumsum() - col_val
-            cum_count = df.groupby('username', observed=True)[col].cumcount()
-            prop = (cum_sum / cum_count.replace(0, np.nan)).fillna(0.0).astype(np.float32)
-            new_cols[f'user_{name}_listened_prop'] = prop
-
-        # Añadir todas las columnas de golpe para evitar fragmentación
-        df = pd.concat([df, pd.DataFrame(new_cols, index=df.index)], axis=1)
-        return df
-
-    def processUserPropCategorical(df, col, name):
-        """
-        Calcula la proporción histórica de que cada usuario escuche la categoría
-        específica de la fila actual en la columna 'col' hasta justo antes de la observación.
-        """
-        df = df.copy()
-        
-        # Convertir a categoría para eficiencia
-        df[col] = df[col].astype('category')
-        
-        categories = df[col].cat.categories
-        
-        # Crear matriz de proporciones por usuario y categoría
-        prop_matrix = pd.DataFrame(index=df.index, columns=categories, dtype=np.float32)
-        
-        for cat in categories:
-            indicator = (df[col] == cat).astype(float)
-            cumsum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
-            count = df.groupby('username', observed=True).cumcount()
-            prop = (cumsum / count.replace(0, np.nan)).fillna(0)
-            prop_matrix[cat] = prop
-        
-        # Seleccionar la proporción correspondiente a la categoría de cada fila
-        cat_codes = df[col].cat.codes.to_numpy()
-        prop_matrix_np = prop_matrix.to_numpy()
-        df[f'user_{name}_listened_prop'] = prop_matrix_np[np.arange(len(df)), cat_codes].astype(np.float32)
-        
-        return df
-
     # ================
     # 0 - Features no determinadas por usuario
     # ================
@@ -611,18 +564,7 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
         'user_avg_track_duration_skipped',
         'user_avg_track_duration_not_skipped',
         'user_avg_podcast_duration_skipped',
-        'user_avg_podcast_duration_not_skipped',
-        'user_preference_this_age',
-        'user_time_since_last_play',
-        'user_time_since_last_same_track',
-        'user_time_since_last_same_artist',
-        'user_track_listens_count',
-        'artist_play_count',
-        'genre1_play_count',
-        'user_artist_listens_today_count',
-        'user_track_listens_today_count',
-        'user_session_len_so_far',
-        
+        'user_avg_podcast_duration_not_skipped',        
     ]
     df_target = df_target.merge(
         last_by_group(['username'], user_cols),
@@ -689,6 +631,11 @@ def applyHistoricalNonUserFeaturesToSet(df_target, df_train):
 
     return df_target
 
+
+#######################
+# MÉTODOS AUXILIARES
+#######################
+
 def createNewTimeBasedFeatures(df, field):
     df["month_played_" + field] = df[field].dt.month.astype("uint8")
     df["hour_of_day_" + field] = df[field].dt.hour.astype("uint8")
@@ -710,11 +657,6 @@ def createNewTimeBasedFeaturesSimple(df, field):
     df["day_of_month_" + field] = df[field].dt.day.astype("uint8")
 
     return df
-
-
-#######################
-# MÉTODOS AUXILIARES
-#######################
 
 def momento_del_dia(hora):
     if 6 <= hora < 10:
