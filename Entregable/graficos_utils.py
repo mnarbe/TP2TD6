@@ -191,46 +191,46 @@ def plot_top_artists_with_skips_and_plays(df: pd.DataFrame, top_n: int = 8) -> N
     print("="*80)
     
     # Estadísticas generales
-    print(f"\n📊 ESTADÍSTICAS GENERALES:")
+    print(f"\nESTADISTICAS GENERALES:")
     print(f"   Skip rate promedio general: {df['target'].mean():.4f}")
     print(f"   Total de reproducciones analizadas: {len(df_clean):,}")
-    print(f"   Artistas únicos: {df_clean['master_metadata_album_artist_name'].nunique():,}")
+    print(f"   Artistas unicos: {df_clean['master_metadata_album_artist_name'].nunique():,}")
     
     # Tabla detallada de los top artistas
-    print(f"\n🎵 TOP {top_n} ARTISTAS DETALLADOS:")
+    print(f"\nTOP {top_n} ARTISTAS DETALLADOS:")
     print("-" * 80)
     print(f"{'Rank':<4} {'Artista':<25} {'Total':<8} {'Completadas':<12} {'Skips':<8} {'Skip%':<8}")
     print("-" * 80)
     
     for i, (_, row) in enumerate(top_artists.iterrows(), 1):
         skip_rate = row['total_skips'] / row['total_plays']
-        skip_indicator = "🟢" if skip_rate < 0.15 else "🟡" if skip_rate < 0.25 else "🔴"
+        skip_indicator = "[BAJO]" if skip_rate < 0.15 else "[MEDIO]" if skip_rate < 0.25 else "[ALTO]"
         print(f"{i:<4} {row['master_metadata_album_artist_name'][:24]:<25} "
               f"{row['total_plays']:,} {row['completed_plays']:,} {row['total_skips']:,} "
               f"{skip_rate:.1%} {skip_indicator}")
     
     # Análisis de categorías de skip rate
-    print(f"\n📈 ANÁLISIS POR CATEGORÍAS DE SKIP RATE:")
+    print(f"\nANALISIS POR CATEGORIAS DE SKIP RATE:")
     top_artists['skip_rate'] = top_artists['total_skips'] / top_artists['total_plays']
     
     low_skip = top_artists[top_artists['skip_rate'] < 0.15]
     medium_skip = top_artists[(top_artists['skip_rate'] >= 0.15) & (top_artists['skip_rate'] < 0.25)]
     high_skip = top_artists[top_artists['skip_rate'] >= 0.25]
     
-    print(f"   🟢 Skip rate bajo (< 15%): {len(low_skip)} artistas")
+    print(f"   Skip rate bajo (< 15%): {len(low_skip)} artistas")
     if len(low_skip) > 0:
         print(f"      - {', '.join(low_skip['master_metadata_album_artist_name'].tolist())}")
     
-    print(f"   🟡 Skip rate medio (15%-25%): {len(medium_skip)} artistas")
+    print(f"   Skip rate medio (15%-25%): {len(medium_skip)} artistas")
     if len(medium_skip) > 0:
         print(f"      - {', '.join(medium_skip['master_metadata_album_artist_name'].tolist())}")
     
-    print(f"   🔴 Skip rate alto (≥ 25%): {len(high_skip)} artistas")
+    print(f"   Skip rate alto (>= 25%): {len(high_skip)} artistas")
     if len(high_skip) > 0:
         print(f"      - {', '.join(high_skip['master_metadata_album_artist_name'].tolist())}")
     
     # Estadísticas de skips
-    print(f"\n🔥 ESTADÍSTICAS DE SKIPS:")
+    print(f"\nESTADISTICAS DE SKIPS:")
     print(f"   Total de skips en top {top_n}: {top_artists['total_skips'].sum():,}")
     print(f"   Total de reproducciones completadas: {top_artists['completed_plays'].sum():,}")
     print(f"   Skip rate promedio en top {top_n}: {top_artists['skip_rate'].mean():.1%}")
@@ -238,13 +238,13 @@ def plot_top_artists_with_skips_and_plays(df: pd.DataFrame, top_n: int = 8) -> N
     # Artista con más skips
     max_skips_idx = top_artists['total_skips'].idxmax()
     max_skips_artist = top_artists.loc[max_skips_idx]
-    print(f"   Artista con más skips: {max_skips_artist['master_metadata_album_artist_name']} "
+    print(f"   Artista con mas skips: {max_skips_artist['master_metadata_album_artist_name']} "
           f"({max_skips_artist['total_skips']:,} skips)")
     
     # Artista con mejor retención
     min_skip_rate_idx = top_artists['skip_rate'].idxmin()
     min_skip_rate_artist = top_artists.loc[min_skip_rate_idx]
-    print(f"   Artista con mejor retención: {min_skip_rate_artist['master_metadata_album_artist_name']} "
+    print(f"   Artista con mejor retencion: {min_skip_rate_artist['master_metadata_album_artist_name']} "
           f"({min_skip_rate_artist['skip_rate']:.1%} skip rate)")
 
 
@@ -311,13 +311,13 @@ def plot_heatmap_skip_rate_by_hour_weekday(df: pd.DataFrame) -> None:
     print("="*60)
     
     # Estadísticas generales del heatmap
-    print(f"\n📊 ESTADÍSTICAS DEL HEATMAP:")
-    print(f"   Skip rate mínimo: {heatmap_data.min().min():.4f}")
-    print(f"   Skip rate máximo: {heatmap_data.max().max():.4f}")
+    print(f"\nESTADISTICAS DEL HEATMAP:")
+    print(f"   Skip rate minimo: {heatmap_data.min().min():.4f}")
+    print(f"   Skip rate maximo: {heatmap_data.max().max():.4f}")
     print(f"   Skip rate promedio: {heatmap_data.mean().mean():.4f}")
     
     # Encontrar las celdas con mayor skip rate
-    print(f"\n🔥 TOP 5 COMBINACIONES CON MAYOR SKIP RATE:")
+    print(f"\nTOP 5 COMBINACIONES CON MAYOR SKIP RATE:")
     flat_data = heatmap_data.stack().reset_index()
     flat_data.columns = ['dia', 'hora', 'skip_rate']
     top_combinations = flat_data.nlargest(5, 'skip_rate')
@@ -326,13 +326,13 @@ def plot_heatmap_skip_rate_by_hour_weekday(df: pd.DataFrame) -> None:
         print(f"   {row['dia']} a las {row['hora']:2d}:00 - Skip rate: {row['skip_rate']:.4f}")
     
     # Análisis por día de la semana
-    print(f"\n📅 SKIP RATE PROMEDIO POR DÍA:")
+    print(f"\nSKIP RATE PROMEDIO POR DIA:")
     daily_avg = heatmap_data.mean(axis=1).sort_values(ascending=False)
     for dia, rate in daily_avg.items():
         print(f"   {dia}: {rate:.4f}")
     
     # Análisis por hora del día
-    print(f"\n⏰ SKIP RATE PROMEDIO POR HORA:")
+    print(f"\nSKIP RATE PROMEDIO POR HORA:")
     hourly_avg = heatmap_data.mean(axis=0).sort_values(ascending=False)
     for hora, rate in hourly_avg.head(10).items():
         print(f"   Hora {hora:2d}:00 - Skip rate: {rate:.4f}")
@@ -354,16 +354,6 @@ def plotGraficos():
     # Análisis temporal
     # plot_activity_by_hour(df)
     plot_daily_trend(df)
-
-    # # Análisis de skips (si aplica)
-    # plot_target_by_hour(df)
-    # plot_target_vs_duration(df)
-    
-    # Gráfico básico de skips y reproducciones por hora
-    plot_skips_and_plays_by_hour(df)
-    
-    # Gráfico completo con análisis por día de la semana
-    plot_skips_and_plays_by_hour_and_weekday(df)
     
     # Gráfico de heatmap de skip rate por hora y día de la semana
     plot_heatmap_skip_rate_by_hour_weekday(df)
@@ -372,5 +362,5 @@ def plotGraficos():
     plot_top_artists_with_skips_and_plays(df)
 
 
-# if __name__ == "__main__":
-#     main()
+if __name__ == "__main__":
+    plotGraficos()
