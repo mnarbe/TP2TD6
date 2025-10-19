@@ -35,7 +35,7 @@ def split_train_test(df):
     """
     print("Splitting data into train/test sets...")
 
-    # First, separate the actual test set (unknown labels)
+    
     test_mask = df["is_test"].to_numpy()
     X, y = split_x_and_y(df)
 
@@ -56,7 +56,7 @@ def split_train_test_df(df):
     """
     print("Splitting data into train/test sets...")
 
-    # First, separate the actual test set (unknown labels)
+    
     test_mask = df["is_test"].to_numpy()
     train_mask = ~test_mask  # Invertir la máscara
 
@@ -67,7 +67,7 @@ def split_train_test_df(df):
     print(f"  --> Test set:     {df_test.shape[0]} rows")
     return df_train, df_test
 
-# Split x and y
+
 def split_x_and_y(df):
     y = df["target"].to_numpy()
     X = df.drop(columns=["target", "is_test"])
@@ -83,14 +83,14 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
     val_score = roc_auc_score(y_test, preds_val)
     print(f"\nValidation ROC AUC: {val_score}")
 
-    # Save params
+    # Guardar parámetros
     if best_params is not None:
         filename_params = f"modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}_params.json"
         with open(filename_params, 'w') as f:
             json.dump(best_params, f, indent=4)
         print(f"  --> Params guardados en '{filename_params}'")
 
-    # Display top feature importances
+    # Importancias
     print("\nDisplay top importancias...")
     importances = model.feature_importances_
     imp_series = pd.Series(importances, index=model.get_booster().feature_names)
@@ -107,7 +107,7 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
     preds_proba = model.predict_proba(X_test_to_predict)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
 
-    # Save final predictions
+    # Guardar predicciones
     filename = f"modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}.csv"
     preds_df.to_csv(filename, index=False, sep=",")
     print(f"  --> Predicciones guardadas en '{filename}'")
@@ -168,7 +168,7 @@ def cast_column_types(df):
     return df
 
 def processTargetAndTestMask(df):
-    # Create target and test mask
+    
     print("Creating 'target' and 'is_test' columns...")
     df["target"] = (df["reason_end"] == "fwdbtn").astype(int)
     df["is_test"] = df["reason_end"].isna()
@@ -242,7 +242,7 @@ def keepImportantColumnsDefault(df):
 
 
 #####################################################################
-#                        FEATURE ENGINEERING                        #
+#                        Ingeniería de Features                        #
 #####################################################################
 
 def createNewFeatures(df):
@@ -250,7 +250,7 @@ def createNewFeatures(df):
     df = createNewTimeBasedFeatures(df, "ts")
     df = createNewTimeBasedFeaturesSimple(df, "offline_timestamp")
 
-    # Release date features
+    # Features de release date
     df["release_date"] = df["release_date"].combine_first(df["album_release_date"])
     df["release_date"] = pd.to_datetime(df["release_date"], errors="coerce", utc=True)
     df["time_since_release"] = (df["ts"] - df["release_date"]).dt.total_seconds()
@@ -526,7 +526,7 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
         )
 
     # ================
-    # 1️⃣ Features por usuario
+    # 1️Features por usuario
     # ================
     user_cols = [
         'user_skip_rate',
@@ -541,7 +541,7 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
     )
 
     # ================
-    # 2️⃣ Por usuario + operative_system
+    # 2️Por usuario + operative_system
     # ================
     os_cols = ['user_operative_system_skip_rate']
     df_target = df_target.merge(
@@ -550,7 +550,7 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
     )
 
     # ================
-    # 3️⃣ Por usuario + flags booleanas
+    # 3️Por usuario + flags booleanas
     # ================
     boolean_groups = {
         'user_explicit_skip_rate': ['username', 'explicit'],
