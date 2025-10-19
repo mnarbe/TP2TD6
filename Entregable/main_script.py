@@ -14,7 +14,7 @@ TOP_N_USED = 1 # Subconjuntos de features a entrenar luego de hacer backward sel
 
 def runPipeline():
     start = time.time()
-    print("=== Starting pipeline with temporal validation ===")
+    print("=== Comienzo del pipeline ===")
 
     # ===========================
     # 1. Cargar y preprocesar data
@@ -37,6 +37,7 @@ def runPipeline():
     df_train = df_train_dataset[temporal_train_mask].copy()
 
     # Creo counting features para todo el dataset (No hay leakage porque se ordena temporalmente y los bins se calculan con el train set)
+    print("Creando counting features...")
     df = createNewCountingFeatures(df, df_train)
 
     # ===========================
@@ -48,7 +49,7 @@ def runPipeline():
     X_test_to_predict = X_test_to_predict.drop(columns=["target", "is_test"])
 
     # Vuelvo a splitear train y valid
-    print("Performing temporal split...")
+    print("Realizo split por temporalidad...")
     temporal_train_mask = df_train_dataset["year_ts"] < 2024
     temporal_val_mask = df_train_dataset["year_ts"] == 2024
     df_train = df_train_dataset[temporal_train_mask].copy()
@@ -64,26 +65,26 @@ def runPipeline():
     # ===================================================
     # 4. Split final dentro de 2024 (val/test)
     # ===================================================
-    print("final split inside 2024 for validation and test...")
+    print("Split final para valid y test sets...")
 
-    val_cutoff = df_val["ts"].quantile(0.9)  # 90% early 2024 as validation
+    val_cutoff = df_val["ts"].quantile(0.9)  # 90% para valid, restante para test
     df_val_real = df_val[df_val["ts"] <= val_cutoff]
     df_test = df_val[df_val["ts"] > val_cutoff]
 
-    print(f"  --> final training set (pre-2024): {df_train.shape[0]} rows")
-    print(f"  --> final validation set (early 2024): {df_val_real.shape[0]} rows")
-    print(f"  --> final test set (late 2024): {df_test.shape[0]} rows")
+    print(f"  --> Final training set: {df_train.shape[0]} rows")
+    print(f"  --> Final validation set: {df_val_real.shape[0]} rows")
+    print(f"  --> Final test set: {df_test.shape[0]} rows")
 
     # ===================================================
     # 5. Crear features históricas SOLO en train (sin leakage)
     # ===================================================
-    print("Creating new features for train set...")
+    print("Generando nuevas features para train set...")
     df_train = createNewSetFeatures(df_train)
 
     # ===================================================
     # 6. Aplicar features históricas a valid/test
     # ===================================================
-    print("Applying new features for valid and test set...")
+    print("Aplicando nuevas features para valid y test...")
     df_val_real = applyHistoricalFeaturesToSet(df_val, df_train)
     df_test = applyHistoricalFeaturesToSet(df_test, df_train)
     X_test_to_predict = applyHistoricalFeaturesToSet(X_test_to_predict, df_train)
@@ -111,7 +112,6 @@ def runPipeline():
     # ===================================================
     # 9. Drop columnas auxiliares
     # ===================================================
-    # Columnas base a eliminar
     base_cols_to_drop = ["obs_id", "year_ts", "ts", "spotify_track_uri", "date", "hour"]
     
     X_train_features = X_train.drop(columns=base_cols_to_drop, errors='ignore')
@@ -123,7 +123,7 @@ def runPipeline():
     # 10. Aplicar K-Means
     # ===================================================
     # SOLO entrenar K-means en train
-    print(f"Entrenando K-Means en train set...")
+    print(f"Entreno K-Means en train set...")
     X_train_features, kmeans_model = simple_clustering(X_train_features, n_clusters=3)
 
     # Aplicar el MISMO modelo a validation y test
@@ -170,7 +170,7 @@ def runPipeline():
 
         processFinalInformation(model, X_test_selected, y_test, X_test_to_predict_selected, test_obs_ids, best_params=model.get_params())
 
-    print("=== Pipeline complete ===")
+    print("=== Pipeline terminado ===")
     end = time.time()
     print(f'Tiempo transcurrido: {str(end - start)} segundos')
 

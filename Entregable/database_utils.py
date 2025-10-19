@@ -14,23 +14,16 @@ import json
 
 # Carga del dataset
 def load_competition_datasets(data_dir, sample_frac=None, random_state=None):
-    """
-    Load train and test datasets, optionally sample a fraction of the training set,
-    concatenate, and reset index.
-    """
-    print("Loading competition datasets from:", data_dir)
+    print("Cargando datasets:", data_dir)
     train_file = os.path.join(data_dir, "merged_data.csv")
     test_file = os.path.join(data_dir, "merged_test_data.csv")
 
-    # Load training data and optionally subsample
     train_df = pd.read_csv(train_file, low_memory=False)
     if sample_frac is not None:
         train_df = train_df.sample(frac=sample_frac, random_state=random_state)
 
-    # Load test data
     test_df = pd.read_csv(test_file, low_memory=False)
 
-    # Concatenate and reset index
     combined = pd.concat([train_df, test_df], ignore_index=True)
     print(f"  --> Concatenated DataFrame: {combined.shape[0]} rows")
     return combined
@@ -84,8 +77,8 @@ def split_x_and_y(df):
 def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_ids, best_params=None):
     now = datetime.datetime.now()
 
-    # Predict on test set to get validation score
-    print("\nGenerating predictions for test set to get final score...")
+    # Predecir en el conjunto de test para obtener performance final
+    print("\nPredicciones en test para obtener performance final...")
     preds_val = model.predict_proba(X_test)[:, 1]
     val_score = roc_auc_score(y_test, preds_val)
     print(f"\nValidation ROC AUC: {val_score}")
@@ -94,30 +87,30 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
     if best_params is not None:
         filename_params = f"modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}_params.json"
         with open(filename_params, 'w') as f:
-            json.dump(best_params, f, indent=4)  # indent=4 para que quede legible
-        print(f"  --> Params written to '{filename_params}'")
+            json.dump(best_params, f, indent=4)
+        print(f"  --> Params guardados en '{filename_params}'")
 
     # Display top feature importances
-    print("\nExtracting and sorting feature importances...")
+    print("\nDisplay top importancias...")
     importances = model.feature_importances_
     imp_series = pd.Series(importances, index=model.get_booster().feature_names)
     imp_series = imp_series.drop(labels=["obs_id"], errors="ignore")
     imp_sorted = imp_series.sort_values(ascending=False)
     filename_imp = f"modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}_imp.csv"
     imp_sorted.to_csv(filename_imp, header=False)
-    print(f"  --> Importances written to '{filename_imp}'")
+    print(f"  --> Importancias guardadas en '{filename_imp}'")
     print("\nTop feature importances:")
     print(imp_sorted)
 
-    # Generate final test predictions
-    print("\nGenerating final predictions for test set...")
+    # Generar predicciones finales de kaggle
+    print("\nObteniendo predicciones de kaggle...")
     preds_proba = model.predict_proba(X_test_to_predict)[:, 1]
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
 
     # Save final predictions
     filename = f"modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}.csv"
     preds_df.to_csv(filename, index=False, sep=",")
-    print(f"  --> Predictions written to '{filename}'")
+    print(f"  --> Predicciones guardadas en '{filename}'")
 
 
 #####################################################################
@@ -185,7 +178,6 @@ def processTargetAndTestMask(df):
     return df
 
 def keepImportantColumnsDefault(df):
-    # Keep only relevant columns (including year for temporal split)
     to_keep = [
         "obs_id", "username", "ip_addr",
         "target", "is_test",
@@ -231,7 +223,7 @@ def keepImportantColumnsDefault(df):
         "ts", "spotify_track_uri"
     ]
 
-    # Adding time-based features 
+    # Features de tiempo
     time_based_fields = ["ts", "offline_timestamp"]
     for field in time_based_fields:
         to_keep.extend([
@@ -246,7 +238,6 @@ def keepImportantColumnsDefault(df):
             # "day_of_month_" + field
         ])
 
-    # Keep only existing columns
     return df[[col for col in to_keep if col in df.columns]]
 
 
@@ -255,16 +246,15 @@ def keepImportantColumnsDefault(df):
 #####################################################################
 
 def createNewFeatures(df):
-    # Add time-based features on timestamp
+    # Features de tiempo
     df = createNewTimeBasedFeatures(df, "ts")
     df = createNewTimeBasedFeaturesSimple(df, "offline_timestamp")
 
-    # Add release date features
+    # Release date features
     df["release_date"] = df["release_date"].combine_first(df["album_release_date"])
     df["release_date"] = pd.to_datetime(df["release_date"], errors="coerce", utc=True)
     df["time_since_release"] = (df["ts"] - df["release_date"]).dt.total_seconds()
     df["time_since_release"] = df["time_since_release"].astype("float32")
-    # Winsorize heavy tails
     tsr_low, tsr_high = df["time_since_release"].quantile([0.01, 0.99])
     df["time_since_release"] = df["time_since_release"].clip(lower=tsr_low, upper=tsr_high)
     df["release_date_year"] = df["release_date"].dt.year.astype("UInt16")
@@ -273,13 +263,13 @@ def createNewFeatures(df):
     df['song_age_years'] = current_year - df['release_date_year']
     df["song_age_years"] = df["song_age_years"].astype("UInt8")
 
-    # Add type indicators
+    # Indicadores de tipo de registro
     df["is_track"] = df["master_metadata_track_name"].notna().astype("uint8")
     df["is_podcast"] = df["episode_name"].notna().astype("uint8")
 
+    # Split de duration_ms por tipo
     df["track_duration_ms"] = df["duration_ms"].where(df["is_track"] == 1, 0).fillna(0).astype("uint32")
     df["podcast_duration_ms"] = df["duration_ms"].where(df["is_podcast"] == 1, 0).fillna(0).astype("uint64")
-    # Winsorize duration
     d_low, d_high = df["duration_ms"].quantile([0.01, 0.995])
     df["track_duration_ms"] = df["track_duration_ms"].clip(lower=d_low, upper=d_high)
     df["podcast_duration_ms"] = df["podcast_duration_ms"].clip(lower=d_low, upper=d_high)
@@ -294,33 +284,31 @@ def createNewFeatures(df):
     df['user_last_song_different'] = df['user_last_song_different'].fillna(0).astype(np.uint8)
     df.drop(columns='prev_genre1', inplace=True)
 
-    # others
+    # Otros
     df['operative_system'] = df['platform'].apply(get_operative_system).astype('category')
     df['is_mobile'] = df['platform'].isin(['ios', 'android']).astype(np.uint8)
 
     return df
 
 def createNewCountingFeatures(df, df_train):
-    # ================
-    # Aplica nuevas features de counting a todo el dataset (No genera leakage porque están ordenadas temporalmente)
-    # Los cortes de los bins se calculan con datos de train para no filtrar información
-    # ================
-
+    """
+        Aplica nuevas features de counting a todo el dataset (No genera leakage porque están ordenadas temporalmente)
+        Los cortes de los bins se calculan con datos de train para no filtrar información
+    """
+    
     # Ordeno temporalmente
     df = df.sort_values(['ts'])
     
-    # Extraer hora para bin-counting
+    # Extraer hora para futuro uso
     df['hour'] = df['ts'].dt.hour
     
-    # 1. Bin-counting por hora del día (24 bins) - ACUMULATIVO
-    print("  --> Calculating bin-counting for hour of day...")
+    # 1. Conteos por hora del día (24 bins) - ACUMULATIVO
     for hour in range(24):
         indicator = (df['hour'] == hour).astype(int)
         cum_sum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
         df[f'hour_bin_{hour}'] = cum_sum.astype(np.uint16)
     
-    # 2. Bin-counting por duración de canciones (10 bins) - ACUMULATIVO
-    print("  --> Calculating bin-counting for track duration...")
+    # 2. Conteos por duración de canciones (10 bins) - ACUMULATIVO
     # Crear bins de duración solo en train (sin mirar el futuro)
     duration_quantiles = np.unique(df_train['track_duration_ms'].quantile([i/10 for i in range(11)]).values)
     if len(duration_quantiles) < 2:
@@ -340,8 +328,7 @@ def createNewCountingFeatures(df, df_train):
             cum_sum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
             df[f'duration_bin_{bin_idx}'] = cum_sum.astype(np.uint16)
     
-    # 3. Bin-counting por popularidad (5 bins) - ACUMULATIVO
-    print("  --> Calculating bin-counting for popularity...")
+    # 3. Conteos por popularidad (5 bins) - ACUMULATIVO
     popularity_quantiles = np.unique(df_train['popularity'].quantile([i/5 for i in range(6)]).values)
     if len(popularity_quantiles) < 2:
         df['popularity_bin'] = 0
@@ -355,8 +342,7 @@ def createNewCountingFeatures(df, df_train):
             cum_sum = indicator.groupby(df['username'], observed=True).cumsum() - indicator
             df[f'popularity_bin_{bin_idx}'] = cum_sum.astype(np.uint16)
 
-    # 4. Bin-counting por cantidad de canciones por día (5 bins) - ACUMULATIVO
-    print("  --> Calculating bin-counting for daily songs...")
+    # 4. Conteos por cantidad de canciones por día (5 bins) - ACUMULATIVO
     df['date'] = df['ts'].dt.date
     # Calcular canciones por día HASTA AHORA (histórico)
     df['songs_count_in_day'] = df.groupby(['username', 'date'], observed=True).cumcount()
@@ -365,8 +351,7 @@ def createNewCountingFeatures(df, df_train):
     # Calcular escuchas del mismo artista por usuario en el mismo día HASTA AHORA (histórico)
     df['user_artist_listens_today_count'] = df.groupby(['username', 'date', 'master_metadata_album_artist_name'], observed=True).cumcount()
 
-    # 5. Bin-counting por tiempo entre reproducciones (6 bins) - ACUMULATIVO
-    print("  --> Calculating bin-counting for time between songs...")
+    # 5. Conteos por tiempo entre reproducciones (6 bins) - ACUMULATIVO
     df['time_between_songs'] = df.groupby('username', observed=True)['ts'].diff().dt.total_seconds()
     time_diff_bins = [-np.inf, 60, 300, 900, 1800, 3600, np.inf]
     df['time_diff_bin'] = pd.cut(df['time_between_songs'], bins=time_diff_bins, labels=False)
@@ -389,11 +374,11 @@ def createNewCountingFeatures(df, df_train):
     # Conteo de reproducciones por género (acumulado)
     df['genre1_play_count'] = df.groupby(['username', 'genre1'], observed=True).cumcount()
 
-    # Recency for same track/artist
+    # Último tiempo de reproducción por canción y artista
     df['user_time_since_last_same_track'] = df.groupby(['username','spotify_track_uri'], observed=True)['ts'].diff().dt.total_seconds().astype(np.float32)
     df['user_time_since_last_same_artist'] = df.groupby(['username','master_metadata_album_artist_name'], observed=True)['ts'].diff().dt.total_seconds().astype(np.float32)
 
-    # Session boundaries: large gaps or toggles
+    # Agrupamiento por sesiones
     session_break = (
         (df['user_time_since_last_play'].fillna(1e9) > 45) |
         (df['offline'].astype('int8').diff().abs().fillna(0) > 0) |
@@ -405,27 +390,12 @@ def createNewCountingFeatures(df, df_train):
     return df
 
 def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calcula features históricas (acumuladas hasta antes de la observación actual)
-    para el dataframe de TRAIN. Asume:
-      - df ya está ordenado por ['username', 'ts'] (ascendente).
-      - df contiene la columna 'target' (0/1 skip).
-      - ts es datetime (si no, intenta convertirlo).
-    Añade columnas:
-      - user_skip_rate
-      - user_operative_system_skip_rate
-      - track_skip_rate
-      - artist_skip_rate
-      - user_explicit_skip_rate
-      - user_hour_skip_rate
-    """
     df = df.copy()
 
     # Asegurar ts datetime
     if not pd.api.types.is_datetime64_any_dtype(df['ts']):
         df['ts'] = pd.to_datetime(df['ts'])
     else:
-        # si tiene tz, convertir a naive
         if df['ts'].dt.tz is not None:
             df['ts'] = df['ts'].dt.tz_convert(None)
 
@@ -462,8 +432,7 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
     
     def processRate(df, col, variables):
         df[col] = historical_rate(df, variables, out_name=col)
-        df[col] = df[col].astype(np.float32)  # fuerza tipo numérico
-
+        df[col] = df[col].astype(np.float32)
         return df
     
     # ================
@@ -533,7 +502,6 @@ def createNewSetFeatures(df: pd.DataFrame) -> pd.DataFrame:
     df = processRate(df, 'user_shuffled_skip_rate', ['username', 'shuffle'])
     df = processRate(df, 'user_offline_skip_rate', ['username', 'offline'])
     
-    # Defragment after many column insertions to improve performance
     df = df.copy()
 
     return df
@@ -544,12 +512,6 @@ def applyHistoricalFeaturesToSet(df_target, df_train):
     return df_target
 
 def applyHistoricalUserFeaturesToSet(df_target, df_train):
-    """
-    Toma las features históricas generadas en el TRAIN y aplica
-    el último valor observado (temporalmente consistente)
-    a cada fila de df_target, respetando las features condicionales
-    (por username y otra variable).
-    """
     df_target = df_target.copy()
 
     # Asegurar orden temporal
@@ -604,21 +566,10 @@ def applyHistoricalUserFeaturesToSet(df_target, df_train):
             last_by_group(group_cols, [feat]),
             on=group_cols, how='left'
         )
-
     
     return df_target
 
 def applyHistoricalNonUserFeaturesToSet(df_target, df_train):
-    """
-    Aplica features históricas del set de train a df_target para:
-    - operative_system_skip_rate
-    - global_month_skip_rate
-    - track_skip_rate
-    - artist_skip_rate
-
-    df_target: dataframe donde queremos aplicar los features
-    df_train: dataframe de entrenamiento ya procesado con createNewSetFeatures
-    """
     df_target = df_target.copy()
     global_mean = df_train['target'].mean()
 
@@ -644,7 +595,6 @@ def applyHistoricalNonUserFeaturesToSet(df_target, df_train):
 #####################################################################
 
 def simple_clustering(df, kmeans_model=None, n_clusters=3):
-    """Versión corregida que permite usar un modelo existente o entrenar uno nuevo"""
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     numeric_cols = [col for col in numeric_cols if col not in ['obs_id', 'year_ts', 'target']]
     
@@ -709,7 +659,6 @@ def get_operative_system(p):
         return np.nan
     p = p.lower()
 
-    # ORDEN IMPORTANTE → más específicos primero
     if 'apple' in p and 'tv' in p:
         return 'apple_tv'
     elif 'cast' in p:

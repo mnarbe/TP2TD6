@@ -1,9 +1,5 @@
-
-
-
 # has_popular_artist_genre: alguno de los 3 géneros es de los top N más populares
 # has_rare_artist_genre: alguno de los 3 géneros es de los top N MENOS populares
-
 # is_kids_genre: alguno de los 3 géneros es para niños
 # is_comedy_genre: alguno de los 3 géneros es de comedia
 
@@ -22,7 +18,6 @@
 # has_instrumental_genre: alguno de los tres generos es instrumental. classical, jazz, soundtrack, instrumental, ambient, etc.
 
 # Calcular métricas por user y agregar columnas sobre esas variables:
-
 # user_likes_this_genre: proporción de canciones escuchadas por el usuario con alguno de los géneros actuales.
 # user_rarely_listens_this_genre: si el género actual está fuera de su top N géneros más reproducidos.
 # genre_novelty: qué tan distinto es el género actual respecto al historial (diversidad o exploración).
@@ -70,6 +65,7 @@ party_genres = ["dance", "house", "techno", "edm", "disco", "funk", "pop", "regg
 romantic_genres = ["r&b", "soul", "bolero", "romantic", "love", "bossa nova", "balada", "bachata"]
 relaxing_genres = ["chill", "ambient", "lo-fi", "smooth jazz", "easy listening", "lounge", "soft", "downtempo", "space"]
 instrumental_genres = ["classical", "instrumental", "soundtrack", "jazz", "orchestral", "symphonic", "piano", "ambient"]
+
 # ==============================
 # PREPROCESAMIENTO
 # ==============================
@@ -101,7 +97,7 @@ def has_any(genres, genreset):
     """
     Devuelve True si alguno de los géneros en 'genres'
     contiene (como substring) alguno de los géneros del set.
-    Ejemplo: si 'rock' ∈ genreset y 'rock nacional' está en genres → True.
+    Ejemplo: si 'rock' está en genreset y 'rock nacional' está en genres → True.
     """
     if not isinstance(genres, list):
         return False

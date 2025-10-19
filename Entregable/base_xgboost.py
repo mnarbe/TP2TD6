@@ -15,7 +15,6 @@ DEVICE = 'cuda' if USES_GPU else 'cpu'
 ################################################
 
 def objective_temporal(params, X_train, y_train, X_val, y_val):
-    """Objective function for hyperopt using temporal validation."""
     model = xgb.XGBClassifier(
         objective='binary:logistic',
         seed=C.RAND_SEED,
@@ -25,14 +24,12 @@ def objective_temporal(params, X_train, y_train, X_val, y_val):
         **params
     )
     
-    # Train on pre-2024 data, validate on 2024 data
     model.fit(
         X_train, y_train, 
         eval_set=[(X_val, y_val)], 
-        verbose=False # Stop if no improvement for 50 rounds
+        verbose=False
     )
     
-    # Get predictions on validation set
     preds = model.predict_proba(X_val)[:, 1]
     auc = roc_auc_score(y_val, preds)
     
@@ -56,8 +53,8 @@ def backward_feature_selection_topN(
     save_path="topN_features.csv"
 ):
     """
-    Realiza backward feature elimination con XGBoost usando 'gain' como criterio de importancia.
-    Guarda las mejores N combinaciones de features con su AUC y orden de importancia.
+        Realiza backward feature elimination con XGBoost usando 'gain' como criterio de importancia.
+        Guarda las mejores N combinaciones de features con su AUC y orden de importancia.
     """
 
     if xgb_params is None:
@@ -145,24 +142,10 @@ def backward_feature_selection_topN(
 ################################################
 
 def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
-    """
-    Train XGBoost model using temporal validation (no cross-validation).
-    Uses pre-2024 data for training and 2024 data for validation.
     
-    Args:
-        X_train: Training features (pre-2024)
-        y_train: Training target (pre-2024)  
-        X_val: Validation features (2024)
-        y_val: Validation target (2024)
-        max_evals: Number of hyperparameter evaluations
+    print("=== Entrenando XGBoost con Temporal Validation ===")
     
-    Returns:
-        Trained XGBoost model
-    """
-    
-    print("=== Training XGBoost with Temporal Validation ===")
-    
-    # Define hyperparameter space
+    # Hiperparámetros
     space = {
         'max_depth': hp.uniformint('max_depth', 3, 8),
         'gamma': hp.uniform('gamma', 0, 5),
@@ -176,8 +159,8 @@ def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
         'min_child_weight': hp.uniformint('min_child_weight', 10, 80)
     }
     
-    # Run hyperparameter optimization
-    print(f"Starting hyperparameter optimization with {max_evals} evaluations...")
+    # Optimización bayesiana
+    print(f"Comenzando optimización bayesiana con {max_evals} iteraciones...")
     best = fmin(
         fn=lambda params: objective_temporal(params, X_train, y_train, X_val, y_val),
         space=space,
@@ -187,14 +170,14 @@ def trainXGBoostModelTemporal(X_train, y_train, X_val, y_val, max_evals):
         verbose=False
     )
     
-    # Get best parameters
+    # Obtengo los mejores hiperparámetros
     best_params = space_eval(space, best)
-    print("\nBest hyperparameters found:")
+    print("\nMejores hiperparámetros:")
     for key, value in best_params.items():
         print(f"  {key}: {value}")
     
-    # Train final model with best parameters on all available training data
-    print("\nTraining final model with best parameters...")
+    # Entreno el modelo final
+    print("\nEntrenando modelo final con los mejores hiperparámetros encontrados...")
     final_model = xgb.XGBClassifier(objective = 'binary:logistic',
                                 seed = C.RAND_SEED,
                                 device=DEVICE,

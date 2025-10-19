@@ -2,11 +2,11 @@ import os
 import json
 import pandas as pd
 
-def load_spotify_api_data(sp_api_dir="C:/Users/Agustin Mendez/Downloads/spotify_api_data"):
-    """
-    Load and flatten all Spotify API JSON files into a clean DataFrame.
-    Handles both tracks and episodes with a unified schema.
-    """
+SPOTIFY_API_DATA_PATH = "C:/Users/Agustin Mendez/Downloads/spotify_api_data"
+MERGED_TEST_DATA_PATH = "merged_test_data.csv"
+MERGED_DATA_PATH = "merged_data.csv"
+
+def load_spotify_api_data(sp_api_dir=SPOTIFY_API_DATA_PATH):
     rows = []
 
     for fname in os.listdir(sp_api_dir):
@@ -51,11 +51,7 @@ def load_spotify_api_data(sp_api_dir="C:/Users/Agustin Mendez/Downloads/spotify_
     df_api = pd.DataFrame(rows)
     return df_api
 
-def merge_train_with_api(train_path="train_data.txt", sp_api_dir="C:/Users/Agustin Mendez/Downloads/spotify_api_data", output_path="merged_data_2.csv"):
-    """
-    Merge train_data.txt with flattened Spotify API metadata.
-    Tracks merge on 'spotify_track_uri', episodes on 'spotify_episode_uri'.
-    """
+def merge_train_with_api(train_path="train_data.txt", sp_api_dir=SPOTIFY_API_DATA_PATH, output_path=MERGED_DATA_PATH):
     # Load train data
     df_train = pd.read_csv(train_path, sep="\t")  # adjust sep if needed
     print(f"Loaded train data: {df_train.shape[0]} rows")
@@ -103,11 +99,7 @@ def merge_train_with_api(train_path="train_data.txt", sp_api_dir="C:/Users/Agust
 
     return merged
 
-def merge_test_with_api(train_path="test_data.txt", sp_api_dir="C:/Users/Agustin Mendez/Downloads/spotify_api_data", output_path="merged_test_data_2.csv"):
-    """
-    Merge test_data.txt with flattened Spotify API metadata.
-    Tracks merge on 'spotify_track_uri', episodes on 'spotify_episode_uri'.
-    """
+def merge_test_with_api(train_path="test_data.txt", sp_api_dir=SPOTIFY_API_DATA_PATH, output_path=MERGED_TEST_DATA_PATH):
     # Load train data
     df_train = pd.read_csv(train_path, sep="\t")  # adjust sep if needed
     print(f"Loaded train data: {df_train.shape[0]} rows")
