@@ -22,89 +22,6 @@ def load_dataset(file_path: str, sep: str = ',') -> pd.DataFrame:
 
     return df
 
-
-# ==========================
-# ANÁLISIS DESCRIPTIVOS
-# ==========================
-def analyze_basic_info(df: pd.DataFrame) -> None:
-    """
-    Muestra información general sobre el dataset.
-    """
-    print("=== Información general ===")
-    print(f"Período: {df['ts'].min()} — {df['ts'].max()}")
-    print(f"Total de filas: {len(df)}")
-    print(f"Usuarios únicos: {df['obs_id'].nunique() if 'obs_id' in df.columns else 'N/A'}")
-    if 'master_metadata_album_artist_name' in df.columns:
-        print(f"Artistas únicos: {df['master_metadata_album_artist_name'].nunique()}")
-    if 'master_metadata_album_album_name' in df.columns:
-        print(f"Álbumes únicos: {df['master_metadata_album_album_name'].nunique()}")
-
-# ==========================
-# ANÁLISIS TEMPORAL
-# ==========================
-def plot_activity_by_hour(df: pd.DataFrame) -> None:
-    """
-    Grafica la distribución de reproducciones por hora del día.
-    """
-    hourly = df['hour'].value_counts().sort_index()
-    hourly.plot(kind='bar', figsize=(10, 5))
-    plt.title("Actividad por hora del día")
-    plt.xlabel("Hora")
-    plt.ylabel("Cantidad de reproducciones")
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_daily_trend(df: pd.DataFrame) -> None:
-    """
-    Grafica la evolución temporal de reproducciones por día.
-    """
-    daily = df.resample('D', on='ts').size()
-    daily.plot(figsize=(12, 5))
-    plt.title("Evolución de reproducciones diarias")
-    plt.xlabel("Fecha")
-    plt.ylabel("Cantidad de reproducciones")
-    plt.tight_layout()
-    plt.show()
-
-
-# ==========================
-# ANÁLISIS DE SKIPS (si existe la columna)
-# ==========================
-def plot_target_by_hour(df: pd.DataFrame) -> None:
-    """
-    Grafica la proporción de skips (target) por hora.
-    """
-    if 'target' not in df.columns:
-        return
-
-    hourly_skip_rate = df.groupby('hour')['target'].mean()
-    hourly_skip_rate.plot(kind='line', marker='o', figsize=(10, 5))
-    plt.title("Proporción de skips por hora")
-    plt.xlabel("Hora")
-    plt.ylabel("Skip rate")
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_target_vs_duration(df: pd.DataFrame, bins: int = 30) -> None:
-    """
-    Muestra relación entre duración de canciones y skips.
-    """
-    if 'target' not in df.columns or 'track_duration_ms' not in df.columns:
-        return
-
-    grouped = df.groupby(pd.cut(df['track_duration_ms'], bins))['target'].mean()
-
-    grouped.plot(kind='bar', figsize=(12, 5))
-    plt.title("Skip rate según duración de canción")
-    plt.xlabel("Duración (min)")
-    plt.ylabel("Skip rate")
-    plt.tight_layout()
-    plt.show()
-
-
-
 def plot_top_artists_with_skips_and_plays(df: pd.DataFrame, top_n: int = 8) -> None:
     """
     Genera un gráfico de barras que muestra los top N artistas más escuchados
@@ -247,7 +164,6 @@ def plot_top_artists_with_skips_and_plays(df: pd.DataFrame, top_n: int = 8) -> N
     print(f"   Artista con mejor retencion: {min_skip_rate_artist['master_metadata_album_artist_name']} "
           f"({min_skip_rate_artist['skip_rate']:.1%} skip rate)")
 
-
 def plot_duration_vs_skip_rate(df: pd.DataFrame, window_size: float = 0.5) -> None:
     """
     Genera un gráfico que muestra el skip rate promedio por duración usando ventana móvil.
@@ -371,14 +287,6 @@ def plot_duration_vs_skip_rate(df: pd.DataFrame, window_size: float = 0.5) -> No
             skip_rate = range_data['target'].mean()
             count = len(range_data)
             print(f"   {label}: {skip_rate:.3f} skip rate ({count:,} canciones)")
-    
-    # Top 5 rangos con mayor skip rate
-    print(f"\nTOP 5 RANGOS CON MAYOR SKIP RATE:")
-    top_ranges = duration_skip_stats.nlargest(5, 'skip_rate')
-    for _, row in top_ranges.iterrows():
-        print(f"   {row['duration_bin'].left:.1f}-{row['duration_bin'].right:.1f} min: "
-              f"{row['skip_rate']:.3f} ({row['count']:,} canciones)")
-
 
 def plot_heatmap_skip_rate_by_hour_weekday(df: pd.DataFrame) -> None:
     """
@@ -469,8 +377,6 @@ def plot_heatmap_skip_rate_by_hour_weekday(df: pd.DataFrame) -> None:
     for hora, rate in hourly_avg.head(10).items():
         print(f"   Hora {hora:2d}:00 - Skip rate: {rate:.4f}")
 
-
-
 # ==========================
 # MAIN
 # ==========================
@@ -479,13 +385,6 @@ def plotGraficos():
     file_path = "./merged_data.csv"
     df = load_dataset(file_path, sep=',')
     df = processTargetAndTestMask(df)
-
-    # Análisis descriptivos
-    # analyze_basic_info(df)
-
-    # Análisis temporal
-    # plot_activity_by_hour(df)
-    plot_daily_trend(df)
     
     # Gráfico de heatmap de skip rate por hora y día de la semana
     plot_heatmap_skip_rate_by_hour_weekday(df)
@@ -495,10 +394,6 @@ def plotGraficos():
     
     # Gráfico de duración vs skip rate
     plot_duration_vs_skip_rate(df)
-    
-    # Gráfico duration vs skip rate
-    plot_duration_vs_skip_rate(df)
 
-
-if __name__ == "__main__":
-    plotGraficos()
+# if __name__ == "__main__":
+#     plotGraficos()
