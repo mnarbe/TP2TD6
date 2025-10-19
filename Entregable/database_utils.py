@@ -92,7 +92,7 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
 
     # Save params
     if best_params is not None:
-        filename_params = f"resultados/modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}_params.json"
+        filename_params = f"modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}_params.json"
         with open(filename_params, 'w') as f:
             json.dump(best_params, f, indent=4)  # indent=4 para que quede legible
         print(f"  --> Params written to '{filename_params}'")
@@ -103,7 +103,7 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
     imp_series = pd.Series(importances, index=model.get_booster().feature_names)
     imp_series = imp_series.drop(labels=["obs_id"], errors="ignore")
     imp_sorted = imp_series.sort_values(ascending=False)
-    filename_imp = f"resultados/modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}_imp.csv"
+    filename_imp = f"modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}_imp.csv"
     imp_sorted.to_csv(filename_imp, header=False)
     print(f"  --> Importances written to '{filename_imp}'")
     print("\nTop feature importances:")
@@ -115,7 +115,7 @@ def processFinalInformation(model, X_test, y_test, X_test_to_predict, test_obs_i
     preds_df = pd.DataFrame({"obs_id": test_obs_ids, "pred_proba": preds_proba})
 
     # Save final predictions
-    filename = f"resultados/modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}.csv"
+    filename = f"modelo_benchmark_{val_score:.3f}_{now.strftime('%Y%m%d_%H%M%S')}.csv"
     preds_df.to_csv(filename, index=False, sep=",")
     print(f"  --> Predictions written to '{filename}'")
 

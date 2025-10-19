@@ -3,7 +3,6 @@ import time
 from database_utils import *
 from base_xgboost import trainXGBoostModelTemporal, backward_feature_selection_topN
 import constants as C
-import os
 
 pd.set_option("display.max_columns", None)
 

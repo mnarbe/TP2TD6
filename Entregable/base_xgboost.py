@@ -53,7 +53,7 @@ def backward_feature_selection_topN(
     xgb_params=None,
     early_stopping_rounds=30,
     verbose=True,
-    save_path="resultados/topN_features.csv"
+    save_path="topN_features.csv"
 ):
     """
     Realiza backward feature elimination con XGBoost usando 'gain' como criterio de importancia.
