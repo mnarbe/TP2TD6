@@ -1,0 +1,655 @@
+genre,count
+argentine rock,155117
+latin rock,91944
+rock en español,72403
+rock,52044
+punk,38042
+lullaby,34615
+classic rock,32307
+alternative rock,31597
+reggae,28875
+children's music,28610
+reggaeton,27065
+singer-songwriter,26231
+latin indie,21624
+grunge,21366
+spanish-language reggae,19203
+argentine trap,18008
+latin,16558
+roots reggae,16397
+pop punk,15858
+ska,15857
+post-grunge,15788
+latin pop,14440
+art rock,14190
+cumbia,13928
+new wave,13925
+psychedelic rock,13672
+trova,13638
+britpop,13359
+trap latino,12921
+latin folk,12877
+urbano latino,12602
+folklore argentino,12016
+madchester,11088
+edm,11041
+indie rock,10446
+funk rock,10309
+progressive rock,9987
+cuarteto,9957
+proto-punk,9473
+reggae rock,9436
+glam rock,9130
+jazz,8998
+nueva trova,8789
+soft pop,8783
+post-punk,8498
+funk,8482
+synthpop,7828
+alternative metal,7662
+baroque pop,7160
+southern gothic,7035
+pop,6958
+indie,6930
+soul,6711
+christmas,6697
+surf rock,6409
+ska punk,6388
+folk,6215
+progressive metal,6030
+folk rock,5972
+latin alternative,5914
+hard rock,5861
+stoner rock,5547
+mexican rock,5502
+candombe,5426
+garage rock,5390
+rockabilly,5274
+trip hop,5242
+mpb,5216
+downtempo,4939
+neo-psychedelic,4739
+tropical house,4704
+motown,4434
+classic soul,4348
+colombian pop,4344
+rkt,4305
+skate punk,4278
+jazz funk,4197
+blues rock,4091
+rock and roll,3943
+alt country,3941
+rocksteady,3816
+gothic rock,3638
+villancicos,3591
+turreo,3576
+murga,3546
+classical,3534
+soft rock,3514
+acid jazz,3491
+rap metal,3479
+rap,3451
+pop urbano,3402
+french house,3397
+house,3389
+tango,3369
+nu metal,3316
+jam band,3277
+glam metal,3262
+disco,3139
+anti-folk,3112
+electronic,3057
+southern rock,3055
+americana,3043
+acid rock,3031
+cool jazz,3030
+electro,2998
+jangle pop,2970
+hard bop,2964
+art pop,2946
+industrial rock,2812
+progressive house,2790
+chanson,2743
+melodic hardcore,2741
+neoclassical,2732
+latin hip hop,2720
+bebop,2694
+tech house,2658
+french pop,2633
+yacht rock,2587
+jazz fusion,2584
+nova mpb,2574
+metal,2567
+hip hop,2531
+shoegaze,2507
+latin folklore,2500
+darkwave,2434
+nu jazz,2412
+deep house,2365
+indie folk,2352
+trap,2264
+industrial,2264
+adult standards,2231
+industrial metal,2207
+dream pop,2128
+hardcore punk,2091
+retro soul,2071
+classical piano,2063
+bolero,2045
+bachata,2034
+chamamé,1966
+math rock,1934
+electronica,1924
+french jazz,1864
+bossa nova,1863
+big band,1828
+slap house,1821
+big room,1707
+vocal jazz,1698
+blues,1696
+brazilian rock,1666
+east coast hip hop,1643
+jazz rap,1617
+slowcore,1562
+country rock,1536
+noise rock,1524
+doo-wop,1455
+djent,1453
+country,1432
+swing music,1424
+old school hip hop,1395
+stoner metal,1390
+post-rock,1388
+techengue,1379
+alternative dance,1370
+neo soul,1344
+emo,1327
+variété française,1320
+mariachi,1294
+folk pop,1286
+power pop,1254
+flamenco,1245
+lo-fi,1226
+outlaw country,1226
+lo-fi beats,1212
+minimalism,1157
+modern blues,1151
+roots rock,1137
+trance,1134
+soundtrack,1129
+west coast hip hop,1128
+sludge metal,1127
+folk punk,1078
+melodic techno,1076
+thrash metal,1063
+latin house,1049
+rap rock,1038
+techno,986
+electro house,981
+melodic house,978
+future house,967
+alternative r&b,958
+disco house,946
+classic blues,945
+musicals,945
+jazz blues,944
+brazilian jazz,939
+aor,923
+swedish pop,912
+salsa,900
+lounge,894
+merengue,854
+idm,830
+psychobilly,827
+nu disco,814
+classic country,802
+brazilian pop,793
+bedroom pop,765
+space rock,742
+mexican indie,728
+lo-fi indie,723
+lo-fi hip hop,718
+free jazz,715
+heavy metal,695
+ambient,691
+indie jazz,676
+guaracha,670
+riot grrrl,659
+chamber music,659
+moombahton,643
+avant-garde,640
+funky house,639
+gangster rap,635
+mexican ska,628
+indie soul,625
+experimental hip hop,614
+r&b,606
+progressive trance,602
+acoustic pop,598
+hi-nrg,566
+anime,565
+cajun,554
+celtic rock,542
+dancehall,536
+eurodance,534
+minimal techno,533
+latin jazz,522
+zydeco,516
+celtic punk,514
+dub,512
+vallenato,507
+flamenco pop,492
+soul blues,492
+cumbia sonidera,483
+electro swing,472
+dubstep,472
+french indie pop,451
+reggaeton chileno,446
+dansk pop,441
+opera,430
+chilean trap,421
+celtic,417
+japanese vgm,416
+g-house,413
+brazilian bass,409
+comedy,402
+german pop,398
+chilean mambo,394
+italo dance,385
+horror punk,378
+electroclash,373
+bluegrass,370
+g-funk,369
+quiet storm,365
+northern soul,364
+electrocumbia,362
+afrobeat,360
+chillwave,340
+brazilian funk,338
+melbourne bounce,337
+orchestral,337
+organic house,326
+neue deutsche welle,321
+soca,321
+dembow,315
+tribal house,311
+future bass,300
+italo disco,299
+europop,297
+krautrock,295
+spoken word,295
+boogie-woogie,294
+country blues,294
+jazz beats,291
+midwest emo,290
+jazz house,288
+exotica,284
+funk pop,283
+post-hardcore,261
+newgrass,260
+emo rap,245
+bass house,243
+soul jazz,238
+pop soul,238
+new rave,238
+ragga,237
+smooth jazz,229
+southern hip hop,227
+samba,223
+ambient folk,222
+big beat,220
+philly soul,219
+italian singer-songwriter,217
+ranchera,211
+latin afrobeats,208
+afro house,206
+afrobeats,203
+schlager,198
+drone,191
+norwegian pop,189
+german indie,188
+psytrance,186
+experimental,186
+kizomba,184
+lo-fi house,183
+stutter house,181
+dance pop,179
+native american music,176
+lovers rock,172
+requiem,171
+phonk,169
+alternative hip hop,169
+electropop,167
+uk r&b,167
+hardstyle,165
+nz reggae,165
+deathrock,164
+latin dance,150
+k-pop,150
+glitch,150
+post-disco,149
+hip house,149
+son cubano,143
+latin r&b,141
+nederpop,140
+indie pop,138
+speed metal,135
+new jack swing,133
+french r&b,133
+pop urbaine,133
+afro r&b,130
+dance,128
+chillstep,128
+chanson québécoise,124
+afropop,124
+cold wave,120
+folk québécois,120
+pop québécoise,120
+flamenco urbano,119
+drone metal,117
+edm trap,117
+ragtime,115
+axé,115
+german indie pop,115
+kompa,110
+drill,110
+hyperpop,110
+alté,109
+new age,107
+mexican hip hop,105
+uk garage,105
+christian hip hop,103
+french rap,102
+underground hip hop,99
+acid house,97
+hardcore,97
+melodic bass,97
+grime,97
+norsk rock,95
+easy listening,94
+fado,94
+traditional folk,93
+japanese classical,93
+afroswing,89
+manele,89
+banda,89
+norteño,85
+folclor andino,85
+uk drill,84
+breakbeat,84
+chicago house,84
+forró tradicional,83
+city pop,83
+christian,83
+neoperreo,82
+vaporwave,82
+cumbia norteña,80
+ballroom vogue,79
+uk grime,79
+queercore,72
+brazilian hip hop,72
+bass music,71
+dub techno,71
+chicha,69
+ethiopian jazz,68
+electro corridos,66
+cloud rap,66
+grupera,65
+indie punk,64
+cha cha cha,62
+gothic metal,61
+salsa choke,59
+sea shanties,59
+finnish rock,58
+witch house,57
+budots,57
+hypertechno,56
+indie dance,56
+kayokyoku,56
+enka,54
+groove metal,54
+new york drill,53
+brooklyn drill,53
+epadunk,53
+música mexicana,53
+medieval,53
+russelåter,51
+dark r&b,51
+tecnobrega,49
+reggaeton mexa,49
+boom bap,47
+bassline,47
+gnawa,47
+red dirt,47
+grindcore,46
+retro pop,45
+traditional music,45
+drift phonk,44
+j-rock,41
+hardcore hip hop,41
+christian pop,40
+space music,37
+horrorcore,37
+german hip hop,37
+indie r&b,36
+corrido,36
+synthwave,36
+choral,35
+melodic rap,34
+screamo,34
+funk carioca,34
+shibuya-kei,33
+azonto,33
+miami bass,32
+pagode,32
+pop country,32
+tropical music,31
+hardcore techno,31
+arena rock,31
+qawwali,30
+schlagerparty,30
+huayno,30
+drum and bass,29
+acid techno,28
+vietnamese bolero,27
+zouk,27
+sufi,27
+freestyle,27
+highlife,26
+uk funky,26
+champeta,26
+ebm,26
+latin country,26
+doom metal,25
+pagode baiano,24
+contemporary r&b,24
+funk de bh,24
+bollywood,24
+mathcore,23
+timba,22
+japanese indie,22
+canzone napoletana,22
+breakcore,22
+boogie,22
+metalcore,21
+worship,21
+brazilian phonk,21
+corridos tumbados,20
+popular colombian music,20
+jungle,20
+dark ambient,19
+gospel,18
+egg punk,18
+crunk,18
+footwork,18
+christian alternative rock,18
+hiplife,17
+acoustic country,17
+christian rock,17
+riddim,17
+hard techno,16
+raï,16
+hyphy,16
+k-rap,16
+trap soul,16
+sertanejo,16
+mambo,16
+brega,15
+christian country,15
+tekno,15
+ghazal,15
+sertanejo universitário,15
+drumstep,14
+corridos bélicos,14
+dansktop,14
+sad sierreño,14
+honky tonk,14
+tejano,14
+pop rock,14
+mizrahi,13
+chinese hip hop,13
+dansk rap,13
+rally house,13
+chinese r&b,13
+polka,13
+power metal,12
+turkish hip hop,12
+indie electronic,12
+go-go,12
+opm,12
+sertanejo tradicional,12
+bhajan,12
+ccm,11
+desi,11
+indie québécois,11
+sierreño,11
+liquid funk,11
+rock quebecois,11
+turkish pop,11
+traditional country,11
+deathstep,10
+singeli,10
+baltimore club,10
+calypso,10
+j-pop,10
+cedm,10
+jersey club,10
+gregorian chant,10
+hindi pop,10
+brega funk,10
+rage rap,9
+kuduro,9
+anatolian rock,9
+hollands,9
+afro soul,9
+indonesian hip hop,8
+vocaloid,8
+kundiman,8
+son jarocho,8
+afro tech,8
+southern gospel,7
+chicago drill,7
+death metal,7
+anime rap,7
+bounce,7
+j-r&b,7
+funk melody,7
+indonesian r&b,7
+black metal,7
+amapiano,6
+p-pop,6
+country hip hop,6
+norwegian hip hop,6
+trap funk,6
+christian folk,6
+bubblegum pop,6
+shatta,5
+new orleans bounce,5
+k-rock,5
+iskelmä,5
+arrocha,5
+forró,5
+nightcore,5
+gospel r&b,5
+chinese indie,5
+indonesian indie,5
+melodic death metal,5
+symphonic metal,5
+indorock,4
+desi pop,4
+italian trap,4
+trap metal,4
+seresta,4
+moroccan pop,4
+gqom,4
+brazilian trap,4
+hindi hip hop,4
+sexy drill,4
+pop worship,4
+taiwanese pop,3
+speedcore,3
+funk consciente,3
+indonesian pop,3
+texas country,3
+entehno,3
+bacardi,3
+dansband,3
+punjabi pop,3
+hindi indie,3
+mahraganat,3
+taiwanese indie,3
+indonesian rock,3
+k-ballad,3
+arabic hip hop,3
+pinoy rock,2
+gujarati garba,2
+v-pop,2
+vietnamese hip hop,2
+frenchcore,2
+moroccan rap,2
+indian indie,2
+mandopop,2
+vinahouse,2
+kollywood,2
+folk metal,2
+happy hardcore,2
+dembow belico,2
+finnish pop,2
+gujarati pop,2
+desi hip hop,2
+tamil pop,2
+bikutsi,2
+pentecostal,2
+portuguese hip hop,2
+c-pop,2
+arabesk,2
+noise music,2
+malaysian pop,2
+norteño-sax,2
+maskandi,1
+dangdut,1
+piseiro,1
+rumba congolaise,1
+neomelodico,1
+egyptian hip hop,1
+bhangra,1
+malayalam pop,1
+pinoy alternative,1
+agronejo,1
+bisrock,1
+funkot,1
+duranguense,1
+afro adura,1
+disco polo,1
+punjabi hip hop,1
+malay,1
+gufeng,1
+hard house,1
+thai pop,1
+cantopop,1
+chinese rock,1
+mollywood,1
+afropiano,1
+tamil dance,1
+indonesian jazz,1
+j-rap,1

@@ -175,8 +175,9 @@ def runPipeline():
     print(f'Tiempo transcurrido: {str(end - start)} segundos')
 
 def runAnalisis():
-    print("Comenzando Sección de Análisis...")
+    print("=== Comienzo sección de análisis ===")
     plotGraficos()
+    print("")
 
 def main():
     runAnalisis()

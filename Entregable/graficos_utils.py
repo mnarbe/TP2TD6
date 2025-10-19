@@ -114,15 +114,15 @@ def plotGraficos():
     df = processTargetAndTestMask(df)
 
     # Análisis descriptivos
-    analyze_basic_info(df)
+    # analyze_basic_info(df)
 
     # Análisis temporal
+    # plot_activity_by_hour(df)
     plot_daily_trend(df)
-    plot_activity_by_hour(df)
 
-    # Análisis de skips (si aplica)
-    plot_target_by_hour(df)
-    plot_target_vs_duration(df)
+    # # Análisis de skips (si aplica)
+    # plot_target_by_hour(df)
+    # plot_target_vs_duration(df)
 
 
 # if __name__ == "__main__":

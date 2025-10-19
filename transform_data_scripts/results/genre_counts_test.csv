@@ -1,0 +1,413 @@
+genre,count
+argentine rock,12735
+latin rock,7252
+rock en español,5919
+punk,3919
+rock,2826
+classic rock,2731
+alternative rock,1553
+ska,1533
+glam rock,1460
+spanish-language reggae,1447
+ska punk,1445
+pop punk,1375
+psychedelic rock,1370
+new wave,1319
+proto-punk,1277
+argentine trap,1272
+reggae,1233
+singer-songwriter,1204
+latin indie,1184
+art rock,1143
+christmas,1007
+latin pop,921
+post-punk,906
+roots reggae,872
+cuarteto,791
+cumbia,746
+acid rock,737
+progressive rock,715
+baroque pop,680
+folk,678
+pop,674
+alternative metal,668
+jazz,642
+brazilian funk,603
+progressive metal,596
+melodic hardcore,576
+madchester,572
+melodic house,568
+gothic rock,564
+latin folk,558
+britpop,553
+folklore argentino,528
+trip hop,515
+folk rock,500
+urbano latino,488
+funk rock,484
+downtempo,469
+reggaeton,467
+hardcore punk,421
+skate punk,419
+trap latino,416
+latin,411
+latin alternative,397
+indie rock,396
+murga,389
+soul,380
+grunge,352
+southern gothic,350
+stutter house,347
+art pop,332
+synthpop,322
+children's music,321
+jangle pop,318
+trova,317
+lullaby,313
+hard bop,300
+funk carioca,298
+stoner rock,291
+post-grunge,269
+mexican rock,249
+rkt,247
+deep house,245
+indie,243
+melodic techno,238
+bebop,225
+bossa nova,224
+candombe,219
+rap metal,215
+brazilian jazz,203
+techengue,203
+anti-folk,194
+rocksteady,180
+jam band,179
+cool jazz,178
+bachata,169
+space rock,167
+indie folk,163
+latin house,162
+hard rock,162
+stoner metal,156
+reggae rock,155
+folk punk,152
+funk,151
+trap,149
+noise rock,149
+post-rock,148
+jazz fusion,148
+chamamé,147
+shoegaze,146
+neo-psychedelic,144
+hardstyle,142
+big band,138
+latin hip hop,138
+math rock,137
+traditional folk,135
+retro soul,129
+edm,124
+metal,122
+mpb,122
+nu metal,122
+electronic,122
+djent,120
+french house,115
+jazz funk,113
+disco,113
+salsa,109
+neo soul,109
+alt country,109
+southern rock,108
+nueva trova,107
+electro,107
+vocal jazz,105
+latin folklore,103
+brega funk,102
+progressive house,100
+soft rock,99
+classic soul,96
+adult standards,95
+funk pop,95
+pop urbano,93
+colombian pop,93
+motown,92
+tropical house,88
+glam metal,87
+doom metal,87
+bolero,85
+tango,84
+darkwave,82
+emo,82
+guaracha,80
+country rock,77
+indie punk,77
+phonk,76
+jazz blues,76
+latin afrobeats,75
+brazilian phonk,75
+samba,72
+swing music,71
+post-hardcore,68
+soul blues,68
+swedish pop,67
+country blues,66
+rockabilly,64
+classical,64
+merengue,63
+latin jazz,62
+azonto,61
+acid jazz,60
+funk de bh,58
+industrial rock,57
+sludge metal,55
+industrial metal,55
+turreo,54
+industrial,54
+melodic bass,54
+future bass,54
+soft pop,53
+funk consciente,53
+rock and roll,53
+rally house,53
+house,52
+indie soul,52
+east coast hip hop,51
+cold wave,51
+cumbia sonidera,50
+surf rock,50
+yacht rock,49
+drone metal,49
+slowcore,47
+ambient,47
+afro house,46
+japanese classical,45
+garage rock,44
+slap house,44
+idm,43
+trap funk,42
+rap,41
+smooth jazz,40
+heavy metal,40
+mexican indie,40
+soundtrack,39
+brazilian pop,39
+neoclassical,39
+doo-wop,38
+bassline,38
+jazz rap,38
+blues rock,37
+dub,36
+folk pop,34
+lo-fi house,33
+dream pop,33
+alternative dance,31
+power pop,31
+hip hop,31
+thrash metal,31
+americana,31
+italo dance,31
+tech house,30
+anime,30
+new rave,30
+city pop,30
+red dirt,30
+classical piano,29
+old school hip hop,29
+spoken word,29
+aor,28
+norteño,26
+arrocha,26
+eurodance,25
+italian singer-songwriter,25
+banda,25
+italo disco,25
+lounge,25
+villancicos,24
+brazilian trap,24
+sertanejo universitário,23
+sertanejo,23
+mariachi,23
+cumbia norteña,23
+drone,22
+experimental hip hop,22
+west coast hip hop,22
+midwest emo,21
+brazilian hip hop,21
+chanson,20
+piseiro,20
+europop,19
+french indie pop,19
+pagode,19
+french pop,19
+acoustic pop,19
+tropical music,19
+horror punk,19
+organic house,18
+nova mpb,18
+lo-fi,18
+minimalism,17
+r&b,17
+jazz house,17
+g-funk,17
+hi-nrg,17
+nu jazz,16
+brazilian bass,16
+alternative hip hop,16
+latin dance,15
+lo-fi beats,15
+psychobilly,14
+reggaeton chileno,14
+speed metal,14
+free jazz,14
+trance,14
+gangster rap,13
+country,13
+french jazz,13
+ragga,12
+nu disco,12
+progressive trance,12
+chilean mambo,12
+alternative r&b,12
+chillwave,12
+chillstep,12
+uk garage,12
+chilean trap,12
+disco house,12
+riot grrrl,12
+forró,12
+classic country,11
+blues,11
+dancehall,11
+soul jazz,11
+deathrock,11
+son cubano,11
+variété française,10
+musicals,10
+sertanejo tradicional,9
+orchestral,9
+drift phonk,9
+rap rock,9
+electronica,8
+big room,8
+ambient folk,8
+gabber,8
+ragtime,8
+electrocumbia,7
+native american music,7
+modern blues,7
+flamenco,7
+lo-fi indie,7
+neue deutsche welle,7
+k-pop,7
+avant-garde,7
+latin country,7
+techno,7
+ranchera,7
+mexican hip hop,6
+southern hip hop,6
+funky house,6
+brazilian rock,6
+experimental,6
+soca,6
+mexican ska,6
+christian,5
+hip house,5
+quiet storm,5
+retro pop,5
+chamber music,5
+queercore,5
+flamenco pop,5
+forró tradicional,5
+dance,5
+gnawa,5
+roots rock,5
+bedroom pop,5
+christian hip hop,4
+screamo,4
+hardcore,4
+latin r&b,4
+bass house,4
+minimal techno,4
+new age,4
+big beat,4
+comedy,4
+electroclash,4
+salsa choke,3
+new york drill,3
+krautrock,3
+exotica,3
+vallenato,3
+tribal house,3
+timba,3
+dembow,3
+hyperpop,3
+moombahton,3
+drill,3
+chicha,3
+folclor andino,3
+electro swing,3
+indie pop,3
+new jack swing,3
+brooklyn drill,3
+symphonic metal,3
+nederpop,3
+afrobeat,3
+witch house,3
+opera,3
+neoperreo,3
+celtic punk,2
+easy listening,2
+afropop,2
+acid house,2
+celtic rock,2
+sierreño,2
+power metal,2
+synthwave,2
+dark r&b,2
+j-pop,2
+brega,2
+christian alternative rock,2
+jazz beats,2
+uk funky,2
+kayokyoku,2
+electropop,2
+outlaw country,2
+metalcore,2
+emo rap,2
+christian rock,2
+gothic metal,2
+boogie-woogie,2
+afrobeats,2
+seresta,2
+french r&b,1
+german indie,1
+j-rock,1
+uk r&b,1
+pagode baiano,1
+electro house,1
+hard house,1
+choral,1
+arena rock,1
+pop urbaine,1
+philly soul,1
+grupera,1
+boom bap,1
+huayno,1
+alté,1
+axé,1
+footwork,1
+requiem,1
+corrido,1
+egg punk,1
+northern soul,1
+indie jazz,1
+pop rock,1
+lo-fi hip hop,1
+vaporwave,1
+contemporary r&b,1
+fado,1
+corridos tumbados,1
+corridos bélicos,1
+afro r&b,1
+dark ambient,1
+space music,1
