@@ -248,6 +248,138 @@ def plot_top_artists_with_skips_and_plays(df: pd.DataFrame, top_n: int = 8) -> N
           f"({min_skip_rate_artist['skip_rate']:.1%} skip rate)")
 
 
+def plot_duration_vs_skip_rate(df: pd.DataFrame, window_size: float = 0.5) -> None:
+    """
+    Genera un gráfico que muestra el skip rate promedio por duración usando ventana móvil.
+    """
+    if 'target' not in df.columns or 'duration_ms' not in df.columns:
+        print("Error: Se requieren las columnas 'target' y 'duration_ms'")
+        return
+
+    # Filtrar datos válidos (excluir NaN en duración)
+    df_clean = df.dropna(subset=['duration_ms']).copy()
+    
+    if len(df_clean) == 0:
+        print("Error: No hay datos válidos de duración de canciones")
+        return
+
+    # Convertir duración de ms a minutos
+    df_clean['duration_minutes'] = df_clean['duration_ms'] / (1000 * 60)
+    
+    # Filtrar duraciones extremas (menos de 10 segundos o más de 20 minutos)
+    df_clean = df_clean[(df_clean['duration_minutes'] >= 0.17) & (df_clean['duration_minutes'] <= 10)]
+    
+    if len(df_clean) == 0:
+        print("Error: No hay datos válidos después del filtrado")
+        return
+
+    # Crear figura con un solo gráfico
+    fig, ax = plt.subplots(1, 1, figsize=(14, 8))
+    
+    # === GRÁFICO: Skip rate promedio por duración (ventana móvil) ===
+    # Crear ventanas de duración y calcular skip rate promedio
+    min_duration = df_clean['duration_minutes'].min()
+    max_duration = df_clean['duration_minutes'].max()
+    
+    windows = []
+    skip_rates = []
+    counts = []
+    
+    current = min_duration
+    while current < max_duration:
+        window_data = df_clean[
+            (df_clean['duration_minutes'] >= current) & 
+            (df_clean['duration_minutes'] < current + window_size)
+        ]
+        if len(window_data) >= 5:  # Al menos 5 canciones en la ventana
+            windows.append(current + window_size/2)
+            skip_rates.append(window_data['target'].mean())
+            counts.append(len(window_data))
+        current += window_size
+    
+    # Gráfico de línea suavizada
+    ax.plot(windows, skip_rates, 'o-', color='green', alpha=0.7, markersize=4, linewidth=2)
+    ax.set_xlabel('Duración (minutos)', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Skip Rate Promedio', fontsize=14, fontweight='bold')
+    ax.grid(True, alpha=0.3)
+    
+    # Agregar línea de referencia
+    overall_skip_rate = df_clean['target'].mean()
+    ax.axhline(y=overall_skip_rate, color='red', linestyle='--', linewidth=2, 
+                label=f'Skip rate general: {overall_skip_rate:.3f}')
+    
+    # Agregar estadísticas en el gráfico
+    mean_duration = df_clean['duration_minutes'].mean()
+    ax.axvline(mean_duration, color='orange', linestyle=':', linewidth=2, 
+               label=f'Duración promedio: {mean_duration:.1f} min')
+    
+    ax.legend(fontsize=12)
+    
+    # Mejorar la apariencia
+    ax.set_ylim(0, max(skip_rates) * 1.1)
+    ax.tick_params(axis='both', which='major', labelsize=12)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # === ANÁLISIS ESTADÍSTICO ===
+    print("\n" + "="*70)
+    print("ANÁLISIS: DURACIÓN DE CANCIONES VS SKIP RATE")
+    print("="*70)
+    
+    # Estadísticas generales
+    print(f"\nESTADISTICAS GENERALES:")
+    print(f"   Total de canciones analizadas: {len(df_clean):,}")
+    print(f"   Duración promedio: {df_clean['duration_minutes'].mean():.2f} minutos")
+    print(f"   Duración mediana: {df_clean['duration_minutes'].median():.2f} minutos")
+    print(f"   Skip rate promedio: {df_clean['target'].mean():.4f}")
+    
+    # Correlación
+    correlation = df_clean['duration_minutes'].corr(df_clean['target'])
+    print(f"   Correlación duración-skip rate: {correlation:.4f}")
+    
+    if abs(correlation) > 0.1:
+        if correlation > 0:
+            print("   -> Las canciones mas largas tienden a tener mayor skip rate")
+        else:
+            print("   -> Las canciones mas cortas tienden a tener mayor skip rate")
+    else:
+        print("   -> No hay correlacion clara entre duracion y skip rate")
+    
+    # Análisis por rangos de duración
+    print(f"\nANALISIS POR RANGOS DE DURACION:")
+    
+    # Definir rangos de duración
+    ranges = [
+        (0, 2, "Muy cortas (< 2 min)"),
+        (2, 3, "Cortas (2-3 min)"),
+        (3, 4, "Medias (3-4 min)"),
+        (4, 5, "Largas (4-5 min)"),
+        (5, float('inf'), "Muy largas (> 5 min)")
+    ]
+    
+    for min_dur, max_dur, label in ranges:
+        if max_dur == float('inf'):
+            range_data = df_clean[df_clean['duration_minutes'] >= min_dur]
+        else:
+            range_data = df_clean[
+                (df_clean['duration_minutes'] >= min_dur) & 
+                (df_clean['duration_minutes'] < max_dur)
+            ]
+        
+        if len(range_data) > 0:
+            skip_rate = range_data['target'].mean()
+            count = len(range_data)
+            print(f"   {label}: {skip_rate:.3f} skip rate ({count:,} canciones)")
+    
+    # Top 5 rangos con mayor skip rate
+    print(f"\nTOP 5 RANGOS CON MAYOR SKIP RATE:")
+    top_ranges = duration_skip_stats.nlargest(5, 'skip_rate')
+    for _, row in top_ranges.iterrows():
+        print(f"   {row['duration_bin'].left:.1f}-{row['duration_bin'].right:.1f} min: "
+              f"{row['skip_rate']:.3f} ({row['count']:,} canciones)")
+
+
 def plot_heatmap_skip_rate_by_hour_weekday(df: pd.DataFrame) -> None:
     """
     Genera solo el heatmap de skip rate por hora del día y día de la semana.
@@ -360,6 +492,12 @@ def plotGraficos():
     
     # Gráfico de top artistas con reproducciones y skips
     plot_top_artists_with_skips_and_plays(df)
+    
+    # Gráfico de duración vs skip rate
+    plot_duration_vs_skip_rate(df)
+    
+    # Gráfico duration vs skip rate
+    plot_duration_vs_skip_rate(df)
 
 
 if __name__ == "__main__":
