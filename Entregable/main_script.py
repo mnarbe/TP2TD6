@@ -3,6 +3,7 @@ import time
 from database_utils import *
 from base_xgboost import trainXGBoostModelTemporal, backward_feature_selection_topN
 import constants as C
+from graficos_utils import plotGraficos
 
 pd.set_option("display.max_columns", None)
 
@@ -175,6 +176,7 @@ def runPipeline():
 
 def runAnalisis():
     print("Comenzando Sección de Análisis...")
+    plotGraficos()
 
 def main():
     runAnalisis()
